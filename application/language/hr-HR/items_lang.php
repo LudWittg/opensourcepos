@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "Maloprodajna cijena je obavezna";
 $lang["items_upc_database"] = "UPC baza";
 $lang["items_update"] = "Ažuriraj artikl";
 $lang["items_use_inventory_menu"] = "Koristi inv. meni";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

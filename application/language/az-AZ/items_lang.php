@@ -116,3 +116,5 @@ $lang["items_unit_price_required"] = "Pərakəndə qiymət - vacib sahədir.";
 $lang["items_upc_database"] = "Barkod Məlumat Bazası";
 $lang["items_update"] = "Malı Yenilə";
 $lang["items_use_inventory_menu"] = "İnvertizasiya Menyusundan İstifadə Et";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

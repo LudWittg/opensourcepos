@@ -116,3 +116,5 @@ $lang["items_unit_price_required"] = "Le prix de détail est requis.";
 $lang["items_upc_database"] = "Base de données des codes à barres";
 $lang["items_update"] = "Éditer l'article";
 $lang["items_use_inventory_menu"] = "Utiliser le menu inventaire";
+$lang["items_time_based_quantity"] = "Quantité basée sur le temps";
+$lang["items_time_based_max_days"] = "Jours maximums";

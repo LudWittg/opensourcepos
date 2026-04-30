@@ -116,3 +116,5 @@ $lang["items_unit_price_required"] = "السعر مطلوب.";
 $lang["items_upc_database"] = "UPC قاعدة بيانات";
 $lang["items_update"] = "تحديث بيانات صنف";
 $lang["items_use_inventory_menu"] = "استخدام تحديث المخزن";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

@@ -116,3 +116,5 @@ $lang["items_unit_price_required"] = "Розничная цена - обязат
 $lang["items_upc_database"] = "База данных штрих-кодов";
 $lang["items_update"] = "Обновление товара";
 $lang["items_use_inventory_menu"] = "Использовать меню запасов";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

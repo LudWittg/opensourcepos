@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "Musíte zadat koncovou cenu.";
 $lang["items_upc_database"] = "Databáze čárových kódů";
 $lang["items_update"] = "Upravit položku";
 $lang["items_use_inventory_menu"] = "Použít nabídku Sklad";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

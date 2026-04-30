@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "Preis ist erforderlich";
 $lang["items_upc_database"] = "UPC Datenbank";
 $lang["items_update"] = "Ändere Artikel";
 $lang["items_use_inventory_menu"] = "Verwende Bestandesmenu";
+$lang["items_time_based_quantity"] = "Zeitbasierte Menge";
+$lang["items_time_based_max_days"] = "Maximale Tage";

@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "Kiskereskedelmi ár kötelező mező";
 $lang["items_upc_database"] = "UPC adatbázis";
 $lang["items_update"] = "Termék módosítás";
 $lang["items_use_inventory_menu"] = "Készl. menü haszn.";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "Роздрібна ціна - обов'я�
 $lang["items_upc_database"] = "UPC база данх";
 $lang["items_update"] = "Оновити Товар";
 $lang["items_use_inventory_menu"] = "Використайте меню інвентаря";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

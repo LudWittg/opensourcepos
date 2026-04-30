@@ -116,3 +116,5 @@ $lang["items_unit_price_required"] = "";
 $lang["items_upc_database"] = "";
 $lang["items_update"] = "";
 $lang["items_use_inventory_menu"] = "";
+$lang["items_time_based_quantity"] = "Cantidad basada en tiempo";
+$lang["items_time_based_max_days"] = "Días máximos";

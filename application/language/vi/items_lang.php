@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "Trường giá bán lẻ là bắt buộc.
 $lang["items_upc_database"] = "Cơ sở dữ liệu mã vạch";
 $lang["items_update"] = "Cập nhật Hàng hóa";
 $lang["items_use_inventory_menu"] = "Dùng trình đơn Tồn kho";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

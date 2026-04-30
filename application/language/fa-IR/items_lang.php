@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "قیمت خرده فروشی یک زمین
 $lang["items_upc_database"] = "بانک اطلاعات بارکد";
 $lang["items_update"] = "به روز کردن مورد";
 $lang["items_use_inventory_menu"] = "استفاده از فهرست موجودی";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

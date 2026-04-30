@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "מחיר קמעונאי הינו שדה ח
 $lang["items_upc_database"] = "מסד נתונים של הברקוד";
 $lang["items_update"] = "עדכן פריט";
 $lang["items_use_inventory_menu"] = "השתמש בתפריט מלאי";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

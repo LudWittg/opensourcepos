@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "Verkoopprijs is een vereist veld.";
 $lang["items_upc_database"] = "Streepjescode database";
 $lang["items_update"] = "Artikel bijwerken";
 $lang["items_use_inventory_menu"] = "Voorraadmenu gebruiken";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "Satış Fiyatı zorunlu alandır.";
 $lang["items_upc_database"] = "UPC Veritabanı";
 $lang["items_update"] = "Ürün Güncelle";
 $lang["items_use_inventory_menu"] = "Stok Menüsünü Kullan";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

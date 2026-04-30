@@ -116,3 +116,5 @@ $lang["items_unit_price_required"] = "តម្លៃលក់រាយ ត្�
 $lang["items_upc_database"] = "ទិន្នន័យ លេខកូត";
 $lang["items_update"] = "កែប្រែទំនិញ";
 $lang["items_use_inventory_menu"] = "ប្រើប្រាស់បញ្ជីទំនិញ";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";

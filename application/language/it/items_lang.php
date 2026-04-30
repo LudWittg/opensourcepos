@@ -116,3 +116,5 @@ $lang["items_unit_price_required"] = "Prezzo al dettaglio è un campo obbligator
 $lang["items_upc_database"] = "Archivio Codice a Barre";
 $lang["items_update"] = "Aggiorna Articolo";
 $lang["items_use_inventory_menu"] = "Usa Menu Inventario";
+$lang["items_time_based_quantity"] = "Quantità basata sul tempo";
+$lang["items_time_based_max_days"] = "Giorni massimi";

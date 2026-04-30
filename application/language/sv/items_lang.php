@@ -117,3 +117,5 @@ $lang["items_unit_price_required"] = "Enhetspriset är ett obligatoriskt fält."
 $lang["items_upc_database"] = "Streckkod databas";
 $lang["items_update"] = "Uppdatera artikeln";
 $lang["items_use_inventory_menu"] = "Använd Inventory Menu";
+$lang["items_time_based_quantity"] = "Time based quantity";
+$lang["items_time_based_max_days"] = "Max days";
