@@ -891,6 +891,8 @@ class Sale_lib
 					'serialnumber' => $serialnumber != NULL ? $serialnumber : '',
 					'allow_alt_description' => $item_info->allow_alt_description,
 					'is_serialized' => $item_info->is_serialized,
+					'time_based_quantity' => $item_info->time_based_quantity,
+					'time_based_max_days' => $item_info->time_based_max_days,
 					'quantity' => $quantity,
 					'discount' => $applied_discount,
 					'discount_type' => $discount_type,

@@ -381,6 +381,31 @@
 		</div>
 
 		<div class="form-group form-group-sm">
+			<?php echo form_label($this->lang->line('items_time_based_quantity'), 'time_based_quantity', array('class'=>'control-label col-xs-3')); ?>
+			<div class='col-xs-1'>
+				<?php echo form_checkbox(array(
+						'name'=>'time_based_quantity',
+						'id'=>'time_based_quantity',
+						'value'=>1,
+						'checked'=>(isset($item_info->time_based_quantity) && $item_info->time_based_quantity) ? 1 : 0)
+						);?>
+			</div>
+		</div>
+
+		<div class="form-group form-group-sm">
+			<?php echo form_label($this->lang->line('items_time_based_max_days'), 'time_based_max_days', array('class'=>'control-label col-xs-3')); ?>
+			<div class='col-xs-4'>
+				<?php echo form_input(array(
+						'name'=>'time_based_max_days',
+						'id'=>'time_based_max_days',
+						'type'=>'number',
+						'class'=>'form-control input-sm',
+						'value'=>isset($item_info->time_based_max_days) ? $item_info->time_based_max_days : '')
+						);?>
+			</div>
+		</div>
+
+		<div class="form-group form-group-sm">
 			<?php echo form_label($this->lang->line('items_is_serialized'), 'is_serialized', array('class'=>'control-label col-xs-3')); ?>
 			<div class='col-xs-1'>
 				<?php echo form_checkbox(array(

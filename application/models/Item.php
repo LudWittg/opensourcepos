@@ -5,6 +5,28 @@
 
 class Item extends CI_Model
 {
+	private $table_verified = FALSE;
+
+	private function ensure_table_schema()
+	{
+		if($this->table_verified)
+		{
+			return;
+		}
+
+		if(!$this->db->field_exists('time_based_quantity', 'items'))
+		{
+			$this->db->query("ALTER TABLE " . $this->db->dbprefix('items') . " ADD time_based_quantity TINYINT(1) NOT NULL DEFAULT 0");
+		}
+
+		if(!$this->db->field_exists('time_based_max_days', 'items'))
+		{
+			$this->db->query("ALTER TABLE " . $this->db->dbprefix('items') . " ADD time_based_max_days INT(11) DEFAULT NULL");
+		}
+
+		$this->table_verified = TRUE;
+	}
+
 	/*
 	Determines if a given item_id is an item
 	*/
@@ -256,6 +278,8 @@ class Item extends CI_Model
 	*/
 	public function get_info($item_id)
 	{
+		$this->ensure_table_schema();
+
 		$this->db->select('items.*');
 		$this->db->select('GROUP_CONCAT(attribute_value SEPARATOR \'|\') AS attribute_values');
 		$this->db->select('GROUP_CONCAT(attribute_decimal SEPARATOR \'|\') AS attribute_dvalues');
@@ -350,6 +374,8 @@ class Item extends CI_Model
 	*/
 	public function get_multiple_info($item_ids, $location_id)
 	{
+		$this->ensure_table_schema();
+
 		$format = $this->db->escape(dateformat_mysql());
 		$this->db->select('items.*');
 		$this->db->select('MAX(company_name) AS company_name');
@@ -374,6 +400,8 @@ class Item extends CI_Model
 	*/
 	public function save(&$item_data, $item_id = FALSE)
 	{
+		$this->ensure_table_schema();
+
 		if(!$item_id || !$this->exists($item_id, TRUE))
 		{
 			if($this->db->insert('items', $item_data))

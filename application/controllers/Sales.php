@@ -1438,6 +1438,19 @@ class Sales extends Secure_Controller
 		$comment = $this->sale_lib->get_comment();
 		$sale_status = SUSPENDED;
 
+		// Restore original quantities for pernottamento items before saving
+		foreach($cart as &$item)
+		{
+			if(isset($item['original_quantity']))
+			{
+				$item['quantity'] = $item['original_quantity'];
+				$item['total'] = $this->sale_lib->get_item_total($item['quantity'], $item['price'], $item['discount'], $item['discount_type']);
+				$item['discounted_total'] = $this->sale_lib->get_item_total($item['quantity'], $item['price'], $item['discount'], $item['discount_type'], TRUE);
+				unset($item['original_quantity']);
+			}
+		}
+		unset($item);
+
 		$data = array();
 		$sales_taxes = array(array(), array());
 		if($this->Sale->save($sale_id, $sale_status, $cart, $customer_id, $employee_id, $comment, $invoice_number, $work_order_number, $quote_number, $sale_type, $payments, $dinner_table, $sales_taxes) == '-1')
@@ -1484,6 +1497,91 @@ class Sales extends Secure_Controller
 
 		$this->_reload();
 	}
+
+	/**
+	 * Unsuspend a sale and multiply the quantity of items containing "pernottamento"
+	 * in their name by the number of days between the suspension date and today.
+	 */
+	public function unsuspend_pernottamento()
+	{
+		$sale_id = $this->input->post('suspended_sale_id');
+		$this->sale_lib->clear_all();
+
+		if($sale_id > 0)
+		{
+			// Get the suspension date directly from the sales table
+			// (avoid Sale->get_info() as it creates temp tables that conflict with _reload())
+			$this->db->select('sale_time');
+			$this->db->from('sales');
+			$this->db->where('sale_id', $sale_id);
+			$sale_row = $this->db->get()->row();
+			$suspension_date = new DateTime($sale_row->sale_time);
+			$today = new DateTime('today');
+			$days_diff = (int)$today->diff($suspension_date)->days;
+
+			// Ensure at least 1 day difference to avoid zeroing out quantities
+			if($days_diff < 1)
+			{
+				$days_diff = 1;
+			}
+
+			// Copy the entire sale into the session cart
+			$this->sale_lib->copy_entire_sale($sale_id);
+
+			// Now modify the cart: multiply quantity of "pernottamento" items by days_diff
+			$cart = $this->sale_lib->get_cart();
+			foreach($cart as &$item)
+			{
+				if(!empty($item['time_based_quantity']))
+				{
+					$multiplier = $days_diff;
+					if(!empty($item['time_based_max_days']) && $item['time_based_max_days'] > 0)
+					{
+						$multiplier = min($days_diff, $item['time_based_max_days']);
+					}
+
+					$original_quantity = $item['quantity'];
+					$new_quantity = $original_quantity * $multiplier;
+					$item['original_quantity'] = $original_quantity;
+					$item['quantity'] = $new_quantity;
+					$item['total'] = $this->sale_lib->get_item_total($new_quantity, $item['price'], $item['discount'], $item['discount_type']);
+					$item['discounted_total'] = $this->sale_lib->get_item_total($new_quantity, $item['price'], $item['discount'], $item['discount_type'], TRUE);
+				}
+			}
+			unset($item);
+			$this->sale_lib->set_cart($cart);
+		}
+
+		// Set current register mode to reflect that of unsuspended order type
+		$this->change_register_mode($this->sale_lib->get_sale_type());
+
+		$this->_reload();
+	}
+
+	/**
+	 * Returns the items of a suspended sale as JSON for inline preview
+	 */
+	public function preview_suspended_sale()
+	{
+		$sale_id = $this->input->get('sale_id');
+		$items = array();
+
+		if($sale_id > 0)
+		{
+			foreach($this->Sale->get_sale_items_ordered($sale_id)->result() as $row)
+			{
+				$items[] = array(
+					'name' => $row->name,
+					'quantity' => $row->quantity_purchased,
+					'price' => to_currency($row->item_unit_price),
+					'total' => to_currency($row->quantity_purchased * $row->item_unit_price)
+				);
+			}
+		}
+
+		echo json_encode($items);
+	}
+
 	
 	public function sales_keyboard_help()
 	{

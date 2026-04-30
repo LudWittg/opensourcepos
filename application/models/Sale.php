@@ -612,6 +612,8 @@ class Sale extends CI_Model
 		}
 		else
 		{
+			// Preserve the original sale_time when re-suspending an existing sale
+			unset($sales_data['sale_time']);
 			$this->db->where('sale_id', $sale_id);
 			$this->db->update('sales', $sales_data);
 		}

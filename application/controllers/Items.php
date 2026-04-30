@@ -526,6 +526,8 @@ class Items extends Secure_Controller
 			'receiving_quantity' => $receiving_quantity,
 			'allow_alt_description' => $this->input->post('allow_alt_description') !== NULL,
 			'is_serialized' => $this->input->post('is_serialized') !== NULL,
+			'time_based_quantity' => $this->input->post('time_based_quantity') !== NULL,
+			'time_based_max_days' => $this->input->post('time_based_max_days') === '' ? NULL : intval($this->input->post('time_based_max_days')),
 			'qty_per_pack' => $this->input->post('qty_per_pack') === NULL ? 1 : $this->input->post('qty_per_pack'),
 			'pack_name' => $this->input->post('pack_name') === NULL ? $default_pack_name : $this->input->post('pack_name'),
 			'low_sell_item_id' => $this->input->post('low_sell_item_id') === NULL ? $item_id : $this->input->post('low_sell_item_id'),
