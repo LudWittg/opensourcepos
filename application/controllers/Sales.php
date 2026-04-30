@@ -1489,26 +1489,6 @@ class Sales extends Secure_Controller
 
 		if($sale_id > 0)
 		{
-			$this->sale_lib->copy_entire_sale($sale_id);
-		}
-
-		// Set current register mode to reflect that of unsuspended order type
-		$this->change_register_mode($this->sale_lib->get_sale_type());
-
-		$this->_reload();
-	}
-
-	/**
-	 * Unsuspend a sale and multiply the quantity of items containing "pernottamento"
-	 * in their name by the number of days between the suspension date and today.
-	 */
-	public function unsuspend_pernottamento()
-	{
-		$sale_id = $this->input->post('suspended_sale_id');
-		$this->sale_lib->clear_all();
-
-		if($sale_id > 0)
-		{
 			// Get the suspension date directly from the sales table
 			// (avoid Sale->get_info() as it creates temp tables that conflict with _reload())
 			$this->db->select('sale_time');
@@ -1528,7 +1508,7 @@ class Sales extends Secure_Controller
 			// Copy the entire sale into the session cart
 			$this->sale_lib->copy_entire_sale($sale_id);
 
-			// Now modify the cart: multiply quantity of "pernottamento" items by days_diff
+			// Now modify the cart: multiply quantity of time_based_quantity items by days_diff
 			$cart = $this->sale_lib->get_cart();
 			foreach($cart as &$item)
 			{

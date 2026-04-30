@@ -112,10 +112,6 @@
 						<?php echo form_hidden('suspended_sale_id', $suspended_sale['sale_id']); ?>
 						<input type="submit" name="submit" value="<?php echo $this->lang->line('sales_unsuspend'); ?>" id="submit_<?php echo $suspended_sale['sale_id']; ?>" class="btn btn-primary btn-xs pull-right">
 					<?php echo form_close(); ?>
-					<?php echo form_open('sales/unsuspend_pernottamento', array('style' => 'display:inline')); ?>
-						<?php echo form_hidden('suspended_sale_id', $suspended_sale['sale_id']); ?>
-						<input type="submit" name="submit" value="Unsuspend Pernottamento" id="submit_pernottamento_<?php echo $suspended_sale['sale_id']; ?>" class="btn btn-warning btn-xs pull-right" style="margin-right:5px;">
-					<?php echo form_close(); ?>
 				</td>
 			</tr>
 			<tr class="preview-row" id="preview_row_<?php echo $suspended_sale['sale_id']; ?>" style="display:none;">
