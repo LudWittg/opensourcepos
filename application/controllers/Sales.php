@@ -1495,9 +1495,9 @@ class Sales extends Secure_Controller
 			$this->db->from('sales');
 			$this->db->where('sale_id', $sale_id);
 			$sale_row = $this->db->get()->row();
-			$suspension_date = new DateTime($sale_row->sale_time);
+			$suspension_day = (new DateTime($sale_row->sale_time))->setTime(0, 0, 0);
 			$today = new DateTime('today');
-			$days_diff = (int)$today->diff($suspension_date)->days;
+			$days_diff = (int)$today->diff($suspension_day)->days;
 
 			// Ensure at least 1 day difference to avoid zeroing out quantities
 			if($days_diff < 1)

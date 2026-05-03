@@ -588,6 +588,32 @@ class Sale extends CI_Model
 			return -1;
 		}
 
+		if($sale_id != -1 && $sale_status == COMPLETED)
+		{
+			$has_time_based = FALSE;
+			foreach($items as $item)
+			{
+				if(!empty($item['time_based_quantity']))
+				{
+					$has_time_based = TRUE;
+					break;
+				}
+			}
+
+			if($has_time_based)
+			{
+				$this->db->select('sale_time');
+				$this->db->from('sales');
+				$this->db->where('sale_id', $sale_id);
+				$row = $this->db->get()->row();
+				if($row)
+				{
+					$stamp = date('Y-m-d', strtotime($row->sale_time)) . ' - ' . date('Y-m-d');
+					$comment = strlen($comment) ? $stamp . "\n" . $comment : $stamp;
+				}
+			}
+		}
+
 		$sales_data = array(
 			'sale_time'			=> date('Y-m-d H:i:s'),
 			'customer_id'		=> $this->Customer->exists($customer_id) ? $customer_id : NULL,

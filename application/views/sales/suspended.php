@@ -34,6 +34,11 @@
 	color: #333;
 }
 </style>
+<div class="form-group" style="margin-bottom:10px;">
+	<input type="text" id="suspended_customer_filter" class="form-control"
+		placeholder="<?php echo $this->lang->line('common_search'); ?>"
+		autocomplete="off">
+</div>
 <table id="suspended_sales_table" class="table table-striped table-hover">
 	<thead>
 		<tr bgcolor="#CCC">
@@ -60,8 +65,14 @@
 		if($this->config->item('dinner_table_enable') == TRUE) { $colspan = 8; }
 		foreach($suspended_sales as $suspended_sale)
 		{
+			$customer_name = '';
+			if(isset($suspended_sale['customer_id']))
+			{
+				$customer = $this->Customer->get_info($suspended_sale['customer_id']);
+				$customer_name = $customer->first_name . ' ' . $customer->last_name;
+			}
 		?>
-			<tr>
+			<tr data-customer="<?php echo html_escape(strtolower($customer_name)); ?>">
 				<td>
 					<span class="glyphicon glyphicon-eye-open btn-preview" id="preview_btn_<?php echo $suspended_sale['sale_id']; ?>"
 						onclick="togglePreview(<?php echo $suspended_sale['sale_id']; ?>)" title="Preview items"></span>
@@ -78,10 +89,9 @@
 				?>
 				<td>
 					<?php
-					if(isset($suspended_sale['customer_id']))
+					if($customer_name !== '')
 					{
-						$customer = $this->Customer->get_info($suspended_sale['customer_id']);
-						echo $customer->first_name . ' ' . $customer->last_name;
+						echo $customer_name;
 					}
 					else
 					{
@@ -174,4 +184,38 @@ function togglePreview(saleId) {
 		btn.className = 'glyphicon glyphicon-eye-open btn-preview';
 	}
 }
+
+(function() {
+	var input = document.getElementById('suspended_customer_filter');
+	if (!input) return;
+
+	function fuzzy(needle, hay) {
+		if (!needle) return true;
+		var hi = 0;
+		for (var i = 0; i < needle.length; i++) {
+			var ch = needle.charAt(i);
+			if (ch === ' ') continue;
+			var found = hay.indexOf(ch, hi);
+			if (found === -1) return false;
+			hi = found + 1;
+		}
+		return true;
+	}
+
+	input.addEventListener('input', function() {
+		var q = this.value.toLowerCase().trim();
+		var rows = document.querySelectorAll('#suspended_sales_table tbody > tr');
+		for (var i = 0; i < rows.length; i++) {
+			var r = rows[i];
+			if (r.classList.contains('preview-row')) continue;
+			var name = r.getAttribute('data-customer') || '';
+			var show = fuzzy(q, name);
+			r.style.display = show ? '' : 'none';
+			var next = r.nextElementSibling;
+			if (next && next.classList.contains('preview-row') && !show) {
+				next.style.display = 'none';
+			}
+		}
+	});
+})();
 </script>
