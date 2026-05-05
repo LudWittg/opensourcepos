@@ -407,9 +407,9 @@ class Reports extends Secure_Controller
 	}
 
 	//Summary Payments report
-	public function summary_payments($start_date, $end_date)
+	public function summary_payments($start_date, $end_date, $sale_type = '0', $location_id = 'all', $discount_type = '0')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => 'complete', 'location_id' => 'all');
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => 'complete', 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_payments');
 		$model = $this->Summary_payments;
@@ -479,6 +479,16 @@ class Reports extends Secure_Controller
 	public function date_input_only()
 	{
 		$data = array();
+
+		$this->load->view('reports/date_input', $data);
+	}
+
+	//Input for the Summary Payments report: date range plus stock-location filter.
+	public function date_input_payments()
+	{
+		$stock_locations = $this->xss_clean($this->Stock_location->get_allowed_locations('sales'));
+		$stock_locations['all'] = $this->lang->line('reports_all');
+		$data = array('stock_locations' => array_reverse($stock_locations, TRUE));
 
 		$this->load->view('reports/date_input', $data);
 	}
