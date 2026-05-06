@@ -980,7 +980,7 @@ class Sale_lib
 		return -1;
 	}
 
-	public function edit_item($line, $description, $serialnumber, $quantity, $discount, $discount_type, $price, $discounted_total=NULL)
+	public function edit_item($line, $description, $serialnumber, $quantity, $discount, $discount_type, $price, $discounted_total=NULL, $item_location=NULL)
 	{
 		$items = $this->get_cart();
 		if(isset($items[$line]))
@@ -1002,6 +1002,11 @@ class Sale_lib
 			$line['price'] = $price;
 			$line['total'] = $this->get_item_total($quantity, $price, $discount, $line['discount_type']);
 			$line['discounted_total'] = $this->get_item_total($quantity, $price, $discount, $line['discount_type'], TRUE);
+			if($item_location !== NULL && $item_location !== '' && $item_location != $line['item_location'])
+			{
+				$line['item_location'] = $item_location;
+				$line['stock_name'] = $this->CI->Stock_location->get_location_name($item_location);
+			}
 			$this->set_cart($items);
 		}
 

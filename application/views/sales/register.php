@@ -134,12 +134,18 @@ if(isset($success))
 				foreach(array_reverse($cart, TRUE) as $line=>$item)
 				{
 			?>
+					<?php
+					$show_location_dropdown = (count($stock_locations) > 1);
+					?>
 					<?php echo form_open($controller_name."/edit_item/$line", array('class'=>'form-horizontal', 'id'=>'cart_'.$line)); ?>
 						<tr>
 							<td>
 								<span data-item-id="<?php echo $line; ?>" class="delete_item_button"><span class="glyphicon glyphicon-trash"></span></span>
 								<?php
-								echo form_hidden('location', $item['item_location']);
+								if(!$show_location_dropdown)
+								{
+									echo form_hidden('location', $item['item_location']);
+								}
 								echo form_input(array('type'=>'hidden', 'name'=>'item_id', 'value'=>$item['item_id']));
 								?>
 							</td>
@@ -150,6 +156,9 @@ if(isset($success))
 								<td><?php echo form_input(array('name'=>'item_number', 'id'=>'item_number','class'=>'form-control input-sm', 'value'=>$item['item_number'], 'tabindex'=>++$tabindex)); ?></td>
 								<td style="align: center;">
 									<?php echo form_input(array('name'=>'name','id'=>'name', 'class'=>'form-control input-sm', 'value'=>$item['name'], 'tabindex'=>++$tabindex)); ?>
+									<?php if ($show_location_dropdown): ?>
+										<br/>[<?php echo form_dropdown('location', $stock_locations, $item['item_location'], array('class'=>'form-control input-sm', 'style'=>'display:inline-block; width:auto; vertical-align:baseline;', 'tabindex'=>++$tabindex)); ?>]
+									<?php endif; ?>
 								</td>
 							<?php
 							}
@@ -160,11 +169,21 @@ if(isset($success))
 								<td style="align: center;">
 									<?php echo $item['name'] . ' '. implode(' ', array($item['attribute_values'], $item['attribute_dtvalues'])); ?>
 									<br/>
-									<?php if ($item['stock_type'] == '0'): echo '[' . to_quantity_decimals($item['in_stock']) . ' in ' . $item['stock_name'] . ']'; endif; ?>
+									<?php if ($item['stock_type'] == '0'): ?>
+									[<?php echo to_quantity_decimals($item['in_stock']); ?> in
+									<?php if ($show_location_dropdown): ?>
+										<?php echo form_dropdown('location', $stock_locations, $item['item_location'], array('class'=>'form-control input-sm', 'style'=>'display:inline-block; width:auto; vertical-align:baseline;', 'tabindex'=>++$tabindex)); ?>
+									<?php else: ?>
+										<?php echo $item['stock_name']; ?>
+									<?php endif; ?>]
+								<?php elseif ($show_location_dropdown): ?>
+									[<?php echo form_dropdown('location', $stock_locations, $item['item_location'], array('class'=>'form-control input-sm', 'style'=>'display:inline-block; width:auto; vertical-align:baseline;', 'tabindex'=>++$tabindex)); ?>]
+								<?php endif; ?>
 								</td>
 							<?php
 							}
 							?>
+
 
 							<td>
 								<?php
@@ -906,7 +925,7 @@ $(document).ready(function()
 		}
 	}
 
-	$('[name="price"],[name="quantity"],[name="discount"],[name="description"],[name="serialnumber"],[name="discounted_total"]').change(function() {
+	$('[name="price"],[name="quantity"],[name="discount"],[name="description"],[name="serialnumber"],[name="discounted_total"],[name="location"]').change(function() {
 		$(this).parents('tr').prevAll('form:first').submit()
 	});
 
