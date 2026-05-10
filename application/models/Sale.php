@@ -817,6 +817,394 @@ class Sale extends CI_Model
 	}
 
 	/**
+	 * Returns one stored line from sales_items, joined with the items
+	 * table for the canonical name. Used by the per-item edit modal.
+	 */
+	public function get_sale_item_line($sale_id, $line)
+	{
+		$this->db->select('sales_items.sale_id, sales_items.item_id, sales_items.line,
+			sales_items.description, sales_items.serialnumber, sales_items.quantity_purchased,
+			sales_items.item_cost_price, sales_items.item_unit_price,
+			sales_items.discount, sales_items.discount_type, sales_items.item_location,
+			sales_items.print_option,
+			items.name AS item_name, items.item_number, items.stock_type');
+		$this->db->from('sales_items');
+		$this->db->join('items', 'items.item_id = sales_items.item_id', 'left');
+		$this->db->where('sales_items.sale_id', $sale_id);
+		$this->db->where('sales_items.line', $line);
+
+		return $this->db->get()->row_array();
+	}
+
+	/**
+	 * Update one line of a completed sale. Fully recomputes taxes,
+	 * inventory deltas, and the sale balance (option A: appends a cash
+	 * payment row for the resulting delta so amount_due == effective tendered).
+	 *
+	 * Returns array {success, message, sale_id} — caller echoes as JSON.
+	 */
+	public function update_sale_item($sale_id, $line, $data, $employee_id)
+	{
+		// Destination-based tax requires per-customer location resolution that
+		// our streamlined recompute path can't honor; refuse the edit cleanly.
+		if($this->config->item('use_destination_based_tax'))
+		{
+			return array('success' => FALSE, 'message' => $this->lang->line('sales_item_edit_destination_tax_unsupported'), 'sale_id' => $sale_id);
+		}
+
+		$existing = $this->get_sale_item_line($sale_id, $line);
+		if(empty($existing))
+		{
+			return array('success' => FALSE, 'message' => $this->lang->line('sales_unable_to_save_item'), 'sale_id' => $sale_id);
+		}
+
+		// Treat zero quantity as a delete for safety.
+		if($data['quantity_purchased'] == 0)
+		{
+			return $this->delete_sale_item($sale_id, $line, $employee_id);
+		}
+
+		$this->db->trans_start();
+
+		$this->db->where('sale_id', $sale_id);
+		$this->db->where('line', $line);
+		$this->db->update('sales_items', array(
+			'description'        => character_limiter($data['description'], 255),
+			'serialnumber'       => character_limiter($data['serialnumber'], 30),
+			'quantity_purchased' => $data['quantity_purchased'],
+			'item_cost_price'    => $data['item_cost_price'],
+			'item_unit_price'    => $data['item_unit_price'],
+			'discount'           => $data['discount'],
+			'discount_type'      => $data['discount_type'],
+			'item_location'      => $data['item_location'],
+			'print_option'       => $data['print_option']
+		));
+
+		$this->_apply_sale_item_inventory_delta(
+			$sale_id, $existing['item_id'], $employee_id,
+			$existing['stock_type'],
+			$existing['item_location'], $existing['quantity_purchased'],
+			$data['item_location'], $data['quantity_purchased']
+		);
+
+		$this->_recompute_line_taxes($sale_id, $existing['item_id'], $line,
+			$data['quantity_purchased'], $data['item_unit_price'], $data['discount'], $data['discount_type']);
+
+		$this->_rebuild_sales_taxes_aggregate($sale_id);
+		$this->_reconcile_sale_balance($sale_id, $employee_id);
+
+		$this->db->trans_complete();
+		$ok = $this->db->trans_status();
+
+		return array(
+			'success' => (bool) $ok,
+			'message' => $this->lang->line($ok ? 'sales_item_successfully_updated' : 'sales_unable_to_save_item'),
+			'sale_id' => $sale_id
+		);
+	}
+
+	/**
+	 * Delete one line of a completed sale. Reverses inventory, drops
+	 * sales_items_taxes and per-sale attribute_links rows, rebuilds the
+	 * sales_taxes aggregate, and reconciles the sale balance.
+	 */
+	public function delete_sale_item($sale_id, $line, $employee_id)
+	{
+		if($this->config->item('use_destination_based_tax'))
+		{
+			return array('success' => FALSE, 'message' => $this->lang->line('sales_item_edit_destination_tax_unsupported'), 'sale_id' => $sale_id);
+		}
+
+		$existing = $this->get_sale_item_line($sale_id, $line);
+		if(empty($existing))
+		{
+			return array('success' => FALSE, 'message' => $this->lang->line('sales_unable_to_save_item'), 'sale_id' => $sale_id);
+		}
+
+		// Refuse to delete the last remaining line — the user should void the
+		// whole sale via the existing flow instead, which has different audit semantics.
+		$this->db->where('sale_id', $sale_id);
+		$line_count = $this->db->count_all_results('sales_items');
+		if($line_count <= 1)
+		{
+			return array('success' => FALSE, 'message' => $this->lang->line('sales_unable_to_delete_last_item'), 'sale_id' => $sale_id);
+		}
+
+		$this->db->trans_start();
+
+		// `ospos_sales_items_taxes.sale_id` has a non-composite FK to
+		// `ospos_sales_items.sale_id`. MariaDB blocks DELETEs of a single
+		// sales_items row whenever ANY sales_items_taxes row shares the same
+		// sale_id, even though other sales_items rows still satisfy the FK.
+		// OSPOS never expected single-line deletes (Sale::delete() only flips
+		// sale_status), so the schema doesn't ON DELETE CASCADE here. Drop the
+		// line's own tax rows first, then suspend FK checks for just the
+		// sales_items DELETE — the surrounding transaction still gives
+		// atomicity, and orphan checks resume immediately after.
+		$this->db->delete('sales_items_taxes', array('sale_id' => $sale_id, 'item_id' => $existing['item_id'], 'line' => $line));
+		// Per-sale attribute_links carry sale_id; drop only those tied to this sale + item.
+		$this->db->delete('attribute_links', array('sale_id' => $sale_id, 'item_id' => $existing['item_id']));
+
+		$this->db->query('SET FOREIGN_KEY_CHECKS = 0');
+		$this->db->delete('sales_items', array('sale_id' => $sale_id, 'line' => $line));
+		$this->db->query('SET FOREIGN_KEY_CHECKS = 1');
+
+		$this->_apply_sale_item_inventory_delta(
+			$sale_id, $existing['item_id'], $employee_id,
+			$existing['stock_type'],
+			$existing['item_location'], $existing['quantity_purchased'],
+			$existing['item_location'], 0
+		);
+
+		$this->_rebuild_sales_taxes_aggregate($sale_id);
+		$this->_reconcile_sale_balance($sale_id, $employee_id);
+
+		$this->db->trans_complete();
+		$ok = $this->db->trans_status();
+
+		return array(
+			'success' => (bool) $ok,
+			'message' => $this->lang->line($ok ? 'sales_item_successfully_deleted' : 'sales_unable_to_save_item'),
+			'sale_id' => $sale_id
+		);
+	}
+
+	/**
+	 * Append inventory rows for a per-line quantity or location change.
+	 * Always inserts new rows (never updates) and keeps Item_quantity in sync.
+	 */
+	private function _apply_sale_item_inventory_delta($sale_id, $item_id, $employee_id, $stock_type,
+		$old_location, $old_qty, $new_location, $new_qty)
+	{
+		if($stock_type != HAS_STOCK)
+		{
+			return;
+		}
+
+		$now = date('Y-m-d H:i:s');
+		$comment = 'POS ' . $sale_id . ' edit';
+
+		if($old_location != $new_location)
+		{
+			// Restore at old location, then withdraw at new location.
+			$this->Inventory->insert(array(
+				'trans_date' => $now, 'trans_items' => $item_id, 'trans_user' => $employee_id,
+				'trans_location' => $old_location, 'trans_comment' => $comment,
+				'trans_inventory' => $old_qty
+			));
+			$this->Item_quantity->change_quantity($item_id, $old_location, $old_qty);
+
+			if($new_qty != 0)
+			{
+				$this->Inventory->insert(array(
+					'trans_date' => $now, 'trans_items' => $item_id, 'trans_user' => $employee_id,
+					'trans_location' => $new_location, 'trans_comment' => $comment,
+					'trans_inventory' => -$new_qty
+				));
+				$this->Item_quantity->change_quantity($item_id, $new_location, -$new_qty);
+			}
+		}
+		else
+		{
+			$qty_delta = $new_qty - $old_qty;  // positive: more sold; negative: stock returned
+			if($qty_delta != 0)
+			{
+				$this->Inventory->insert(array(
+					'trans_date' => $now, 'trans_items' => $item_id, 'trans_user' => $employee_id,
+					'trans_location' => $new_location, 'trans_comment' => $comment,
+					'trans_inventory' => -$qty_delta
+				));
+				$this->Item_quantity->change_quantity($item_id, $new_location, -$qty_delta);
+			}
+		}
+	}
+
+	/**
+	 * Replace sales_items_taxes rows for one line. Uses the basic per-line
+	 * tax path (Item_taxes -> Tax_lib::get_item_sales_tax / get_included_tax),
+	 * mirroring Tax_lib::get_taxes' non-destination branch.
+	 */
+	private function _recompute_line_taxes($sale_id, $item_id, $line, $quantity, $price, $discount, $discount_type)
+	{
+		// tax_lib is loaded by Sale_lib but Sale_lib isn't always preloaded for
+		// non-cart code paths (e.g., the report-driven edit), so load explicitly.
+		$this->load->library('tax_lib');
+		$this->load->model('enums/Rounding_mode');
+
+		// Use the historical tax rates captured on the original sale, not the
+		// current Item_taxes config — a rate change since the sale was rung up
+		// must not silently rewrite captured tax amounts. Mirrors
+		// Tax_lib::get_taxes' branch for $sale_id != -1.
+		$this->db->select('name, percent, tax_type, rounding_code, cascade_sequence,
+			sales_tax_code_id, tax_category_id, jurisdiction_id');
+		$this->db->from('sales_items_taxes');
+		$this->db->where('sale_id', $sale_id);
+		$this->db->where('item_id', $item_id);
+		$this->db->where('line', $line);
+		$taxes = $this->db->get()->result_array();
+
+		$this->db->delete('sales_items_taxes', array('sale_id' => $sale_id, 'item_id' => $item_id, 'line' => $line));
+
+		if(empty($taxes))
+		{
+			// Line had no prior taxes (item was non-taxable for this sale);
+			// keep it that way rather than guessing from current config.
+			return;
+		}
+
+		$tax_decimals = tax_decimals();
+
+		foreach($taxes as $tax)
+		{
+			$rounding_code = $tax['rounding_code'];
+			if($tax['tax_type'] == Tax_lib::TAX_TYPE_INCLUDED)
+			{
+				$tax_amount = $this->tax_lib->get_included_tax($quantity, $price, $discount, $discount_type, $tax['percent'], $tax_decimals, $rounding_code);
+			}
+			else
+			{
+				$tax_amount = $this->tax_lib->get_item_sales_tax($quantity, $price, $discount, $discount_type, $tax['percent'], $rounding_code);
+			}
+
+			if($tax_amount == 0)
+			{
+				continue;
+			}
+
+			$this->db->insert('sales_items_taxes', array(
+				'sale_id'           => $sale_id,
+				'item_id'           => $item_id,
+				'line'              => $line,
+				'name'              => $tax['name'],
+				'percent'           => $tax['percent'],
+				'tax_type'          => $tax['tax_type'],
+				'rounding_code'     => $rounding_code,
+				'cascade_sequence'  => $tax['cascade_sequence'],
+				'item_tax_amount'   => $tax_amount,
+				'sales_tax_code_id' => $tax['sales_tax_code_id'],
+				'tax_category_id'   => $tax['tax_category_id'],
+				'jurisdiction_id'   => $tax['jurisdiction_id']
+			));
+		}
+	}
+
+	/**
+	 * Recompute the sales_taxes per-name aggregate (used by receipts/invoices)
+	 * by summing sales_items_taxes for the sale.
+	 */
+	private function _rebuild_sales_taxes_aggregate($sale_id)
+	{
+		$this->db->delete('sales_taxes', array('sale_id' => $sale_id));
+
+		$this->db->select('tax_type, name AS tax_group, SUM(item_tax_amount) AS sale_tax_amount,
+			MAX(percent) AS tax_rate, MAX(name) AS name, MAX(rounding_code) AS rounding_code');
+		$this->db->from('sales_items_taxes');
+		$this->db->where('sale_id', $sale_id);
+		$this->db->group_by('tax_type, name');
+		$rows = $this->db->get()->result_array();
+
+		$seq = 0;
+		foreach($rows as $row)
+		{
+			$this->db->insert('sales_taxes', array(
+				'sale_id'           => $sale_id,
+				'tax_type'          => $row['tax_type'],
+				'tax_group'         => $row['tax_group'],
+				'sale_tax_basis'    => 0,  // basis isn't reused outside the printed receipt totals; leave at 0
+				'sale_tax_amount'   => $row['sale_tax_amount'],
+				'print_sequence'    => $seq++,
+				'name'              => $row['name'],
+				'tax_rate'          => $row['tax_rate'],
+				'sales_tax_code_id' => NULL,
+				'jurisdiction_id'   => NULL,
+				'tax_category_id'   => NULL,
+				'rounding_code'     => $row['rounding_code']
+			));
+		}
+	}
+
+	/**
+	 * After a per-line edit, append a balancing sales_payments row so that
+	 * effective tendered (gross payments minus cash refunds) equals the new
+	 * amount_due. Positive delta -> extra cash payment. Negative delta -> cash
+	 * refund row with payment_amount=0.
+	 */
+	private function _reconcile_sale_balance($sale_id, $employee_id)
+	{
+		// Sale::get_info goes through CREATE TEMPORARY TABLE IF NOT EXISTS,
+		// which is a no-op when the temp tables were already populated earlier
+		// in this request — so it would return stale totals here. Aggregate
+		// directly from the canonical tables instead.
+		$decimals = totals_decimals();
+
+		$line_total_expr = 'CASE WHEN sales_items.discount_type = ' . PERCENT
+			. " THEN sales_items.quantity_purchased * sales_items.item_unit_price - ROUND(sales_items.quantity_purchased * sales_items.item_unit_price * sales_items.discount / 100, $decimals)"
+			. ' ELSE sales_items.quantity_purchased * (sales_items.item_unit_price - sales_items.discount) END';
+
+		// Alias the prefixed table back to `sales_items` so the qualified
+		// column references inside $line_total_expr resolve.
+		$this->db->select("ROUND(SUM($line_total_expr), $decimals) AS line_subtotal", FALSE);
+		$this->db->from('sales_items AS sales_items');
+		$this->db->where('sales_items.sale_id', $sale_id);
+		$line_subtotal = (float) $this->db->get()->row()->line_subtotal;
+
+		$tax_total = 0.0;
+		if(!$this->config->item('tax_included'))
+		{
+			$this->db->select('IFNULL(SUM(item_tax_amount), 0) AS tax_total');
+			$this->db->from('sales_items_taxes');
+			$this->db->where('sale_id', $sale_id);
+			$this->db->where('tax_type', Tax_lib::TAX_TYPE_EXCLUDED);
+			$tax_total = (float) $this->db->get()->row()->tax_total;
+		}
+
+		$this->db->select('IFNULL(SUM(CASE WHEN cash_adjustment = 0 THEN payment_amount ELSE 0 END), 0) AS gross_tendered,
+			IFNULL(SUM(CASE WHEN cash_adjustment = 1 THEN payment_amount ELSE 0 END), 0) AS cash_adj,
+			IFNULL(SUM(cash_refund), 0) AS cash_refund', FALSE);
+		$this->db->from('sales_payments');
+		$this->db->where('sale_id', $sale_id);
+		$pay = $this->db->get()->row();
+
+		$amount_due = round($line_subtotal + $tax_total + (float) $pay->cash_adj, $decimals, PHP_ROUND_HALF_UP);
+		$gross_tendered = round((float) $pay->gross_tendered, $decimals, PHP_ROUND_HALF_UP);
+		$cash_refund = round((float) $pay->cash_refund, $decimals, PHP_ROUND_HALF_UP);
+		$effective = round($gross_tendered - $cash_refund, $decimals, PHP_ROUND_HALF_UP);
+		$delta = round($amount_due - $effective, $decimals, PHP_ROUND_HALF_UP);
+
+		if(abs($delta) < 0.01)
+		{
+			return;
+		}
+
+		$payment_label = $this->lang->line('sales_cash') . ' ' . $this->lang->line('sales_edit_adjustment');
+
+		if($delta > 0)
+		{
+			$row = array(
+				'sale_id'         => $sale_id,
+				'payment_type'    => $payment_label,
+				'payment_amount'  => $delta,
+				'cash_refund'     => 0,
+				'cash_adjustment' => CASH_ADJUSTMENT_FALSE,
+				'employee_id'     => $employee_id
+			);
+		}
+		else
+		{
+			$row = array(
+				'sale_id'         => $sale_id,
+				'payment_type'    => $payment_label,
+				'payment_amount'  => 0,
+				'cash_refund'     => -$delta,
+				'cash_adjustment' => CASH_ADJUSTMENT_FALSE,
+				'employee_id'     => $employee_id
+			);
+		}
+
+		$this->db->insert('sales_payments', $row);
+	}
+
+	/**
 	 * Return the taxes that were charged
 	 */
 	public function get_sales_taxes($sale_id)

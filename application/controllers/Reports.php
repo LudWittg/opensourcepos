@@ -1272,7 +1272,7 @@ class Reports extends Secure_Controller
 
 		$summary_data = $this->xss_clean(array(
 			'sale_id' => $report_data['sale_id'],
-			'sale_time' => to_datetime(strtotime($row['sale_time'])),
+			'sale_time' => to_datetime(strtotime($report_data['sale_time'])),
 			'quantity' => to_quantity_decimals($report_data['items_purchased']),
 			'employee_name' => $report_data['employee_name'],
 			'customer_name' => $report_data['customer_name'],
@@ -1382,6 +1382,16 @@ class Reports extends Secure_Controller
 		$columns = $model->getDataColumns();
 		$columns['details'] = array_merge($columns['details'], $definition_names);
 
+		$employee_id = $this->Employee->get_logged_in_employee_info()->person_id;
+		$can_edit_items = $this->Employee->has_grant('sales', $employee_id);
+
+		// Append the per-item edit column to the details table when the
+		// signed-in employee has the sales grant.
+		if($can_edit_items)
+		{
+			$columns['details']['edit'] = '';
+		}
+
 		$headers = $this->xss_clean($columns);
 
 		$report_data = $model->getData($inputs);
@@ -1433,7 +1443,7 @@ class Reports extends Secure_Controller
 
 				$attribute_values = expand_attribute_values($definition_names, $drow);
 
-				$details_data[$row['sale_id']][] = $this->xss_clean(array_merge(array(
+				$detail_row = array_merge(array(
 					$drow['name'],
 					$drow['category'],
 					$drow['item_number'],
@@ -1444,7 +1454,23 @@ class Reports extends Secure_Controller
 					to_currency($drow['total']),
 					to_currency($drow['cost']),
 					to_currency($drow['profit']),
-					($drow['discount_type'] == PERCENT)? $drow['discount'].'%':to_currency($drow['discount'])), $attribute_values));
+					($drow['discount_type'] == PERCENT)? $drow['discount'].'%':to_currency($drow['discount'])), $attribute_values);
+
+				if($can_edit_items && $row['sale_status'] != CANCELED)
+				{
+					$detail_row['edit'] = anchor('sales/get_sale_item_form/'.$row['sale_id'].'/'.$drow['line'],
+						'<span class="glyphicon glyphicon-edit"></span>',
+						array('class' => 'modal-dlg print_hide',
+							'data-btn-delete' => $this->lang->line('common_delete'),
+							'data-btn-submit' => $this->lang->line('common_submit'),
+							'title' => $this->lang->line('sales_edit_sale_item')));
+				}
+				elseif($can_edit_items)
+				{
+					$detail_row['edit'] = '';
+				}
+
+				$details_data[$row['sale_id']][] = $this->xss_clean($detail_row);
 			}
 
 			if(isset($report_data['rewards'][$key]))

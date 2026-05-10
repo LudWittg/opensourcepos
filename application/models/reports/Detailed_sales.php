@@ -39,6 +39,8 @@ class Detailed_sales extends Report
 				$this->lang->line('reports_cost'),
 				$this->lang->line('reports_profit'),
 				$this->lang->line('reports_discount')),
+			'details_edit' => array(
+				'edit' => ''),
 			'details_rewards' => array(
 				$this->lang->line('reports_used'),
 				$this->lang->line('reports_earned'))
@@ -145,19 +147,21 @@ class Detailed_sales extends Report
 		foreach($data['summary'] as $key=>$value)
 		{
 			$this->db->select('
-				MAX(name) AS name, 
-				MAX(category) AS category, 
-				MAX(quantity_purchased) AS quantity_purchased, 
-				MAX(item_location) AS item_location, 
-				MAX(item_number) AS item_number, 
-				MAX(description) AS description, 
-				MAX(subtotal) AS subtotal, 
-				MAX(tax) AS tax, 
-				MAX(total) AS total, 
-				MAX(cost) AS cost, 
-				MAX(profit) AS profit, 
-				MAX(discount) AS discount, 
-				MAX(discount_type) AS discount_type, 
+				sales_items_temp.line AS line,
+				sales_items_temp.item_id AS item_id,
+				MAX(name) AS name,
+				MAX(category) AS category,
+				MAX(quantity_purchased) AS quantity_purchased,
+				MAX(item_location) AS item_location,
+				MAX(item_number) AS item_number,
+				MAX(description) AS description,
+				MAX(subtotal) AS subtotal,
+				MAX(tax) AS tax,
+				MAX(total) AS total,
+				MAX(cost) AS cost,
+				MAX(profit) AS profit,
+				MAX(discount) AS discount,
+				MAX(discount_type) AS discount_type,
 				MAX(sale_status) AS sale_status');
 			$this->db->from('sales_items_temp');
 			if(count($inputs['definition_ids']) > 0)

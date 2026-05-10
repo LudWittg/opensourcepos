@@ -1218,6 +1218,192 @@ class Sales extends Secure_Controller
 		$this->load->view('sales/form', $data);
 	}
 
+	/**
+	 * Returns the per-line details for a single sale, in the same shape as
+	 * the detailed_sales report's inner detail table. Used by the per-item
+	 * edit modal flow (in `views/reports/tabular_details.php`) to refresh
+	 * the expanded sub-table after a save/delete. Lives on the Sales
+	 * controller (not Reports) because Reports' constructor enforces a
+	 * regex-derived submodule grant — and the data here is gated by the
+	 * same `sales` grant the modal already requires.
+	 */
+	public function get_sale_lines_for_report($sale_id)
+	{
+		$this->load->helper('report');
+
+		$definition_names = $this->Attribute->get_definitions_by_flags(Attribute::SHOW_IN_SALES);
+		$inputs = array(
+			'sale_id'    => $sale_id,
+			'sale_type'  => 'complete',
+			'location_id'=> 'all',
+			'definition_ids' => array_keys($definition_names)
+		);
+
+		$this->load->model('reports/Detailed_sales');
+		$model = $this->Detailed_sales;
+		$model->create($inputs);
+
+		$employee_id = $this->Employee->get_logged_in_employee_info()->person_id;
+		$can_edit_items = $this->Employee->has_grant('sales', $employee_id);
+		$show_locations = $this->xss_clean($this->Stock_location->multiple_locations());
+
+		$report_data = $model->getData($inputs);
+		$details = array();
+
+		foreach($report_data['summary'] as $key => $row)
+		{
+			if($row['sale_id'] != $sale_id)
+			{
+				continue;
+			}
+
+			foreach($report_data['details'][$key] as $drow)
+			{
+				$quantity_purchased = to_quantity_decimals($drow['quantity_purchased']);
+				if($show_locations)
+				{
+					$quantity_purchased .= ' [' . $this->Stock_location->get_location_name($drow['item_location']) . ']';
+				}
+
+				$attribute_values = expand_attribute_values($definition_names, $drow);
+
+				$detail_row = array_merge(array(
+					$drow['name'],
+					$drow['category'],
+					$drow['item_number'],
+					$drow['description'],
+					$quantity_purchased,
+					to_currency($drow['subtotal']),
+					to_currency_tax($drow['tax']),
+					to_currency($drow['total']),
+					to_currency($drow['cost']),
+					to_currency($drow['profit']),
+					($drow['discount_type'] == PERCENT)? $drow['discount'].'%':to_currency($drow['discount'])), $attribute_values);
+
+				if($can_edit_items && $row['sale_status'] != CANCELED)
+				{
+					$detail_row['edit'] = anchor('sales/get_sale_item_form/'.$row['sale_id'].'/'.$drow['line'],
+						'<span class="glyphicon glyphicon-edit"></span>',
+						array('class' => 'modal-dlg print_hide',
+							'data-btn-delete' => $this->lang->line('common_delete'),
+							'data-btn-submit' => $this->lang->line('common_submit'),
+							'title' => $this->lang->line('sales_edit_sale_item')));
+				}
+				elseif($can_edit_items)
+				{
+					$detail_row['edit'] = '';
+				}
+
+				$details[] = $this->xss_clean($detail_row);
+			}
+		}
+
+		echo json_encode($details);
+	}
+
+	/**
+	 * Renders the per-line edit modal for the detailed_sales report.
+	 */
+	public function get_sale_item_form($sale_id, $line)
+	{
+		$existing = $this->Sale->get_sale_item_line($sale_id, $line);
+		if(empty($existing))
+		{
+			echo $this->lang->line('sales_unable_to_save_item');
+			return;
+		}
+
+		$data = array(
+			'sale_id'        => $sale_id,
+			'line'           => $line,
+			'item'           => $this->xss_clean($existing),
+			'stock_locations'=> $this->xss_clean($this->Stock_location->get_allowed_locations('sales')),
+			'discount_types' => array(
+				PERCENT => '%',
+				FIXED   => $this->config->item('currency_symbol')
+			)
+		);
+
+		$this->load->view('sales/form_sale_item', $data);
+	}
+
+	/**
+	 * Saves (or deletes when delete=1 is posted) a single line of a completed
+	 * sale. Returns the standard {success, message, id} contract consumed by
+	 * manage_tables.js' submit_handler.
+	 */
+	public function save_sale_item($sale_id, $line)
+	{
+		$employee_id = $this->Employee->get_logged_in_employee_info()->person_id;
+		if(!$this->Employee->has_grant('sales', $employee_id))
+		{
+			echo json_encode(array('success' => FALSE, 'message' => $this->lang->line('sales_item_edit_unauthorized'), 'id' => $sale_id));
+			return;
+		}
+
+		// Restrict to completed POS / invoice sales — quotes/work orders/canceled
+		// have different inventory/balance semantics and were excluded from scope.
+		$sale_info = $this->Sale->get_info($sale_id)->row_array();
+		if(empty($sale_info) || $sale_info['sale_status'] != COMPLETED)
+		{
+			echo json_encode(array('success' => FALSE, 'message' => $this->lang->line('sales_item_edit_state_unsupported'), 'id' => $sale_id));
+			return;
+		}
+
+		if($this->input->post('delete') == '1')
+		{
+			$result = $this->Sale->delete_sale_item($sale_id, $line, $employee_id);
+		}
+		else
+		{
+			$this->form_validation->set_rules('item_unit_price', 'lang:sales_price', 'required|callback_numeric');
+			$this->form_validation->set_rules('quantity_purchased', 'lang:sales_quantity', 'required|callback_numeric');
+			$this->form_validation->set_rules('discount', 'lang:sales_discount', 'required|callback_numeric');
+
+			if($this->form_validation->run() == FALSE)
+			{
+				echo json_encode(array('success' => FALSE, 'message' => $this->lang->line('sales_unable_to_save_item'), 'id' => (string) $sale_id));
+				return;
+			}
+
+			$discount_type = $this->input->post('discount_type');
+			// CI form_validation's callback_numeric filter already parsed the
+			// fields it covers (returns the numeric value, which CI writes back
+			// over $_POST). Calling parse_decimals on the result a second time
+			// double-parses and breaks for locales like it-IT (NumberFormatter
+			// re-parses the float-as-string and trips on the thousand sep).
+			// item_cost_price has no validation rule, so it still needs parsing.
+			$data = array(
+				'description'        => $this->input->post('description'),
+				'serialnumber'       => $this->input->post('serialnumber'),
+				'quantity_purchased' => $this->input->post('quantity_purchased'),
+				'item_cost_price'    => parse_decimals($this->input->post('item_cost_price')),
+				'item_unit_price'    => $this->input->post('item_unit_price'),
+				'discount'           => $this->input->post('discount'),
+				'discount_type'      => $discount_type,
+				'item_location'      => $this->input->post('item_location'),
+				'print_option'       => $this->input->post('print_option') !== NULL ? $this->input->post('print_option') : 0
+			);
+
+			// Refuse negative quantity — that's the returns flow, not an edit.
+			if($data['quantity_purchased'] < 0)
+			{
+				echo json_encode(array('success' => FALSE, 'message' => $this->lang->line('sales_unable_to_save_item'), 'id' => $sale_id));
+				return;
+			}
+
+			$result = $this->Sale->update_sale_item($sale_id, $line, $data, $employee_id);
+		}
+
+		echo json_encode(array(
+			'success' => $result['success'],
+			'message' => $result['message'],
+			// id is consumed by manage_tables.js submit_handler which calls
+			// String.prototype.split(":") on it — keep as string.
+			'id'      => (string) $result['sale_id']
+		));
+	}
+
 	public function delete($sale_id = -1, $update_inventory = TRUE)
 	{
 		$employee_id = $this->Employee->get_logged_in_employee_info()->person_id;

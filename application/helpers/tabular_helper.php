@@ -13,7 +13,19 @@ function transform_headers_readonly($array)
 
 	foreach($array as $key => $value)
 	{
-		$result[] = array('field' => $key, 'title' => $value, 'sortable' => $value != '', 'switchable' => !preg_match('(^$|&nbsp)', $value));
+		$col = array('field' => $key, 'title' => $value, 'sortable' => $value != '', 'switchable' => !preg_match('(^$|&nbsp)', $value));
+
+		// HTML-emitting columns (e.g. an inline edit anchor) must opt out of
+		// bootstrap-table's escape pass. Leave `escape` unset for everything
+		// else so columns inherit the table-level default — important because
+		// existing positional callers already rely on `escape: false` at the
+		// table level rendering raw cell content.
+		if(preg_match("/(edit|phone_number|email|messages|item_pic)/", $key))
+		{
+			$col['escape'] = FALSE;
+		}
+
+		$result[] = $col;
 	}
 
 	return json_encode($result);

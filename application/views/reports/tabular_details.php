@@ -45,6 +45,61 @@
 			?>
 		};
 
+		var resolve_sale_id = function(row) {
+			return (!isNaN(row.id) && row.id) || $(row[0] || row.id).text().replace(/(POS|RECV)\s*/g, '');
+		};
+
+		var render_detail_table = function ($detail, sale_id) {
+			$detail.html('<table></table>').find("table").bootstrapTable({
+				columns: <?php echo transform_headers_readonly($headers['details']); ?>,
+				data: details_data[sale_id]
+			});
+
+			<?php
+			if($this->config->item('customer_reward_enable') == TRUE && !empty($details_data_rewards))
+			{
+			?>
+				$detail.append('<table></table>').find("table").bootstrapTable({
+					columns: <?php echo transform_headers_readonly($headers['details_rewards']); ?>,
+					data: details_data_rewards[sale_id]
+				});
+			<?php
+			}
+			?>
+
+			// Wire any per-line edit anchors that were just rendered into this
+			// expanded sub-row. The outer table's onPostBody only catches anchors
+			// in the summary table.
+			dialog_support.init($detail.find("a.modal-dlg"));
+		};
+
+		// After the per-line edit modal saves, re-fetch the items list for the
+		// affected sale and re-render the sub-row in place. The summary row
+		// itself is refreshed by table_support.handle_submit + the existing
+		// reports/get_detailed_sales_row endpoint, which races with this call —
+		// updateByUniqueId rebuilds the row and removes its `.detail-view`
+		// sibling, so we cannot rely on the prior expanded state. Solution:
+		// load fresh details into details_data, then poll briefly until the
+		// summary row exists in the DOM (so updateByUniqueId has settled) and
+		// expand it. expandRow on a row that's already expanded is harmless.
+		window.refresh_detailed_sale_items = function(sale_id) {
+			$.get("<?php echo site_url('sales/get_sale_lines_for_report'); ?>/" + sale_id, function(rows) {
+				details_data[sale_id] = rows;
+
+				var attempts = 0;
+				var tick = function() {
+					attempts++;
+					var $row = $("#table tr[data-uniqueid='" + sale_id + "']");
+					if(!$row.length) {
+						if(attempts < 20) return setTimeout(tick, 50);
+						return;
+					}
+					$('#table').bootstrapTable('expandRow', $row.data('index'));
+				};
+				setTimeout(tick, 100);
+			}, 'json');
+		};
+
 		$('#table')
 			.addClass("table-striped")
 			.addClass("table-bordered")
@@ -72,22 +127,7 @@
 					dialog_support.init("a.modal-dlg");
 				},
 				onExpandRow: function (index, row, $detail) {
-					$detail.html('<table></table>').find("table").bootstrapTable({
-						columns: <?php echo transform_headers_readonly($headers['details']); ?>,
-						data: details_data[(!isNaN(row.id) && row.id) || $(row[0] || row.id).text().replace(/(POS|RECV)\s*/g, '')]
-					});
-
-					<?php
-					if($this->config->item('customer_reward_enable') == TRUE && !empty($details_data_rewards))
-					{
-					?>
-						$detail.append('<table></table>').find("table").bootstrapTable({
-							columns: <?php echo transform_headers_readonly($headers['details_rewards']); ?>,
-							data: details_data_rewards[(!isNaN(row.id) && row.id) || $(row[0] || row.id).text().replace(/(POS|RECV)\s*/g, '')]
-						});
-					<?php
-					}
-					?>
+					render_detail_table($detail, resolve_sale_id(row));
 				}
 		});
 
