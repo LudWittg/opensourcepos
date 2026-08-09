@@ -1052,6 +1052,16 @@ class Sales extends Secure_Controller
 		$data['tax_exclusive_subtotal'] = $this->sale_lib->get_subtotal(TRUE, TRUE);
 		$tax_details = $this->tax_lib->get_taxes($data['cart']);
 		$data['taxes'] = $tax_details[0];
+
+		// Sum the tax rates applied to each cart line so the register can display a tax percentage per row
+		$item_tax_percents_by_line = array();
+		foreach($tax_details[1] as $item_tax)
+		{
+			$line = $item_tax['line'];
+			$item_tax_percents_by_line[$line] = isset($item_tax_percents_by_line[$line]) ? bcadd($item_tax_percents_by_line[$line], $item_tax['percent']) : $item_tax['percent'];
+		}
+		$data['item_tax_percents_by_line'] = $item_tax_percents_by_line;
+
 		$data['discount'] = $this->sale_lib->get_discount();
 		$data['payments'] = $this->sale_lib->get_payments();
 

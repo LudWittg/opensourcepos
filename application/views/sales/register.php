@@ -111,7 +111,7 @@ if(isset($success))
 				<th style="width: 30%;"><?php echo $this->lang->line('sales_item_name'); ?></th>
 				<th style="width: 10%;"><?php echo $this->lang->line('sales_price'); ?></th>
 				<th style="width: 10%;"><?php echo $this->lang->line('sales_quantity'); ?></th>
-				<th style="width: 15%;"><?php echo $this->lang->line('sales_discount'); ?></th>
+				<th style="width: 15%;"><?php echo $this->lang->line('sales_tax_percent'); ?></th>
 				<th style="width: 10%;"><?php echo $this->lang->line('sales_total'); ?></th>
 				<th style="width: 5%; "><?php echo $this->lang->line('sales_update'); ?></th>
 			</tr>
@@ -213,13 +213,15 @@ if(isset($success))
 								?>
 							</td>
 
-							<td>
-								<div class="input-group">
-									<?php echo form_input(array('name'=>'discount', 'class'=>'form-control input-sm', 'value'=>$item['discount_type'] ? to_currency_no_money($item['discount']) : to_decimals($item['discount']), 'tabindex'=>++$tabindex, 'onClick'=>'this.select();')); ?>
-									<span class="input-group-btn">
-										<?php echo form_checkbox(array('id'=>'discount_toggle', 'name'=>'discount_toggle', 'value'=>1, 'data-toggle'=>"toggle",'data-size'=>'small', 'data-onstyle'=>'success', 'data-on'=>'<b>'.$this->config->item('currency_symbol').'</b>', 'data-off'=>'<b>%</b>', 'data-line'=>$line, 'checked'=>$item['discount_type'])); ?>
-									</span>
-								</div>
+							<td style="text-align: center;">
+								<?php
+								echo (float)(isset($item_tax_percents_by_line[$item['line']]) ? $item_tax_percents_by_line[$item['line']] : 0) . '%';
+
+								// The discount is no longer editable from the register, but it still applies to the line
+								// so it has to be posted back unchanged, in the same format edit_item() parses.
+								echo form_hidden('discount', $item['discount_type'] ? to_currency_no_money($item['discount']) : to_decimals($item['discount']));
+								echo form_hidden('discount_type', $item['discount_type']);
+								?>
 							</td>
 
 							<td>
@@ -277,7 +279,6 @@ if(isset($success))
 										}
 										else
 										{
-											echo $this->lang->line('sales_no_description');
 											echo form_hidden('description','');
 										}
 									}
@@ -925,14 +926,8 @@ $(document).ready(function()
 		}
 	}
 
-	$('[name="price"],[name="quantity"],[name="discount"],[name="description"],[name="serialnumber"],[name="discounted_total"],[name="location"]').change(function() {
+	$('[name="price"],[name="quantity"],[name="description"],[name="serialnumber"],[name="discounted_total"],[name="location"]').change(function() {
 		$(this).parents('tr').prevAll('form:first').submit()
-	});
-
-	$('[name="discount_toggle"]').change(function() {
-		var input = $('<input>').attr('type', 'hidden').attr('name', 'discount_type').val(($(this).prop('checked'))?1:0);
-		$('#cart_'+ $(this).attr('data-line')).append($(input));
-		$('#cart_'+ $(this).attr('data-line')).submit();
 	});
 });
 
