@@ -118,11 +118,21 @@
 							<span class="medium"><?php echo $this->lang->line('module_'.$module->module_id);?>:</span>
 							<span class="small"><?php echo $this->lang->line('module_'.$module->module_id.'_desc');?></span>
 							<?php
+								$location_permissions = array();
+
 								foreach($all_subpermissions as $permission)
 								{
 									$exploded_permission = explode('_', $permission->permission_id, 2);
 									if($permission->module_id == $module->module_id)
 									{
+										// permissions tied to a stock location are grouped below, under their own label
+										if(!empty($permission->location_id))
+										{
+											$location_permissions[] = $permission;
+
+											continue;
+										}
+
 										$lang_key = $module->module_id.'_'.$exploded_permission[1];
 										$lang_line = $this->lang->line($lang_key);
 										$lang_line = ($this->lang->line_tbd($lang_key) == $lang_line) ? ucwords(str_replace("_", " ",$exploded_permission[1])) : $lang_line;
@@ -140,12 +150,39 @@
 										}
 									}
 								}
+
+								if(!empty($location_permissions))
+								{
+							?>
+										<ul class="location_permissions">
+											<li>
+												<span class="medium"><?php echo $this->lang->line('employees_locations'); ?></span>
+											</li>
+											<?php
+											foreach($location_permissions as $permission)
+											{
+												$location_name = isset($location_names[$permission->location_id])
+													? $location_names[$permission->location_id]
+													: $permission->permission_id;
+											?>
+												<li>
+													<?php echo form_checkbox("grant_".$permission->permission_id, $permission->permission_id, $permission->grant, "class='location'"); ?>
+													<?php echo form_hidden("menu_group_".$permission->permission_id, "--"); ?>
+													<span class="medium"><?php echo $location_name ?></span>
+												</li>
+											<?php
+											}
+											?>
+										</ul>
+							<?php
+								}
 							?>
 						</li>
 					<?php
 					}
 					?>
 				</ul>
+				<?php echo form_hidden('permission_check', '1'); ?>
 			</fieldset>
 		</div>
 	</div>
@@ -157,19 +194,42 @@ $(document).ready(function()
 {
 	$.validator.setDefaults({ ignore: [] });
 
+	// a granted module needs at least one of its sub-permissions ticked
 	$.validator.addMethod('module', function (value, element) {
 		var result = $('#permission_list input').is(':checked');
 		$('.module').each(function(index, element)
 		{
 			var parent = $(element).parent();
-			var checked =  $(element).is(':checked');
-			if($('ul', parent).length > 0 && result)
+			if(!$(element).is(':checked') || !result)
 			{
-				result &= !checked || (checked && $('ul > li > input:checked', parent).length > 0);
+				return;
+			}
+			if($('ul:not(.location_permissions)', parent).length > 0)
+			{
+				result &= $('ul:not(.location_permissions) > li > input:checked', parent).length > 0;
 			}
 		});
 		return result;
 	}, "<?php echo $this->lang->line('employees_subpermission_required'); ?>");
+
+	// ...and at least one stock location, where the module has them. Without it the account would
+	// still reach the module but see nothing, which is indistinguishable from having no data.
+	$.validator.addMethod('module_location', function (value, element) {
+		var result = true;
+		$('.module').each(function(index, element)
+		{
+			var parent = $(element).parent();
+			if(!$(element).is(':checked'))
+			{
+				return;
+			}
+			if($('ul.location_permissions', parent).length > 0)
+			{
+				result &= $('ul.location_permissions > li > input:checked', parent).length > 0;
+			}
+		});
+		return result;
+	}, "<?php echo $this->lang->line('employees_location_required'); ?>");
 
 	$('ul#permission_list > li > input.module').each(function()
 	{
@@ -230,7 +290,12 @@ $(document).ready(function()
 			{
 				equalTo: '#password'
 			},
-			email: 'email'
+			email: 'email',
+			permission_check:
+			{
+				module: true,
+				module_location: true
+			}
 		},
 
 		messages: 

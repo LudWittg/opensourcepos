@@ -79,10 +79,20 @@ class Employees extends Persons
 			$permission->module_id = $this->xss_clean($permission->module_id);
 			$permission->permission_id = str_replace(' ', '_', $this->xss_clean($permission->permission_id));
 			$permission->grant = $this->xss_clean($this->Employee->has_grant($permission->permission_id, $person_info->person_id));
+			$permission->location_id = $this->xss_clean($permission->location_id);
 
 			$permissions[] = $permission;
 		}
 		$data['all_subpermissions'] = $permissions;
+
+		// Location-scoped permissions are labelled with the stock location name rather than the
+		// permission id, so that e.g. reports_location_Bottega reads as "Bottega"
+		$location_names = array();
+		foreach($this->Stock_location->get_all()->result() as $location)
+		{
+			$location_names[$location->location_id] = $this->xss_clean($location->location_name);
+		}
+		$data['location_names'] = $location_names;
 
 		$this->load->view('employees/form', $data);
 	}

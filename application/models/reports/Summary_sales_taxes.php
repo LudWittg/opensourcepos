@@ -26,6 +26,9 @@ class Summary_sales_taxes extends Summary_report
 		{
 			$this->db->where('sales.sale_time BETWEEN ' . $this->db->escape(rawurldecode($inputs['start_date'])) . ' AND ' . $this->db->escape(rawurldecode($inputs['end_date'])));
 		}
+
+		// this report overrides the parent _where(), so it has to apply the location restriction itself
+		$this->apply_location_filter($inputs);
 	}
 
 	public function getData(array $inputs)
@@ -41,6 +44,10 @@ class Summary_sales_taxes extends Summary_report
 		{
 			$where .= 'AND sale_time BETWEEN ' . $this->db->escape(rawurldecode($inputs['start_date'])) . ' AND ' . $this->db->escape(rawurldecode($inputs['end_date']));
 		}
+
+		// sale_tax_amount is recorded per sale, not per line, so a sale counts as soon as one of its
+		// lines sits in an allowed location - its whole tax is then attributed to that account's view
+		$where .= $this->location_exists_sql($inputs, 'sales.sale_id');
 
 		$query = $this->db->query("SELECT reporting_authority, jurisdiction_name, tax_category, tax_rate,
 			SUM(sale_tax_amount) AS tax

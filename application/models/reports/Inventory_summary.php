@@ -38,10 +38,7 @@ class Inventory_summary extends Report
 			$this->db->where('item_quantities.quantity >', 0);
 		}
 
-		if($inputs['location_id'] != 'all')
-		{
-			$this->db->where('stock_locations.location_id', $inputs['location_id']);
-		}
+		$this->apply_location_filter($inputs, 'stock_locations.location_id');
 
         $this->db->order_by('items.name');
 		$this->db->order_by('items.qty_per_pack');

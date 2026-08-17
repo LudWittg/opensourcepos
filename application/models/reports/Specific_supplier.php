@@ -55,6 +55,7 @@ class Specific_supplier extends Report
 			MAX(discount_type) AS discount_type,
 			MAX(discount) AS discount');
 		$this->db->from('sales_items_temp');
+		$this->apply_location_filter($inputs, 'item_location');
 
 		$this->db->where('supplier_id', $inputs['supplier_id']);
 
@@ -105,6 +106,7 @@ class Specific_supplier extends Report
 	{
 		$this->db->select('SUM(subtotal) AS subtotal, SUM(tax) AS tax, SUM(total) AS total, SUM(cost) AS cost, SUM(profit) AS profit');
 		$this->db->from('sales_items_temp');
+		$this->apply_location_filter($inputs, 'item_location');
 
 		$this->db->where('supplier_id', $inputs['supplier_id']);
 

@@ -27,10 +27,57 @@ class Reports extends Secure_Controller
 		$this->load->helper('report');
 	}
 
+	/*
+	 The stock locations this account may see report data for. Reports have their own per-location
+	 permissions (reports_location_*), independent of the locations the account can sell/receive in.
+
+	 Returns NULL when the account is allowed every location, so the queries stay exactly as they were
+	 for unrestricted accounts; an empty array when it is allowed none, which yields empty reports.
+	 */
+	private function _report_location_ids($location_id)
+	{
+		$allowed = array_keys($this->Stock_location->get_allowed_locations(REPORTS_LOCATION_PREFIX));
+
+		if($location_id === 'all' || $location_id === '' || $location_id === NULL || !ctype_digit((string)$location_id))
+		{
+			return count($allowed) >= $this->Stock_location->get_all()->num_rows() ? NULL : $allowed;
+		}
+
+		if(!in_array((int)$location_id, $allowed))
+		{
+			redirect('no_access/reports/' . REPORTS_LOCATION_PREFIX);
+		}
+
+		return array((int)$location_id);
+	}
+
+	//Stock location dropdown for the report input screens, limited to the allowed report locations
+	private function _report_location_options()
+	{
+		$stock_locations = $this->xss_clean($this->Stock_location->get_allowed_locations(REPORTS_LOCATION_PREFIX));
+		$stock_locations['all'] = $this->lang->line('reports_all');
+
+		return array_reverse($stock_locations, TRUE);
+	}
+
 	//Initial Report listing screen
 	public function index()
 	{
-		$data['grants'] = $this->xss_clean($this->Employee->get_employee_grants($this->session->userdata('person_id')));
+		$grants = $this->Employee->get_employee_grants($this->session->userdata('person_id'));
+
+		// The listing builds its report links from any grant matching /reports_/, so the location
+		// grants have to be kept out of it or they would render as bogus report entries.
+		$location_permissions = $this->Stock_location->get_location_permission_ids('reports');
+		$report_grants = array();
+		foreach($grants as $grant)
+		{
+			if(!in_array($grant['permission_id'], $location_permissions))
+			{
+				$report_grants[] = $grant;
+			}
+		}
+
+		$data['grants'] = $this->xss_clean($report_grants);
 
 		$this->load->view('reports/listing', $data);
 	}
@@ -38,7 +85,7 @@ class Reports extends Secure_Controller
 	//Summary sales report
 	public function summary_sales($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_sales');
 		$model = $this->Summary_sales;
@@ -75,7 +122,7 @@ class Reports extends Secure_Controller
 	//Summary Categories report
 	public function summary_categories($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_categories');
 		$model = $this->Summary_categories;
@@ -111,6 +158,7 @@ class Reports extends Secure_Controller
 	//Summary Expenses by Categories report
 	public function summary_expenses_categories($start_date, $end_date, $sale_type)
 	{
+		// expenses have no stock location, so this report is deliberately left unfiltered
 		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type);
 
 		$this->load->model('reports/Summary_expenses_categories');
@@ -144,7 +192,7 @@ class Reports extends Secure_Controller
 	//Summary Customers report
 	public function summary_customers($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_customers');
 		$model = $this->Summary_customers;
@@ -181,7 +229,7 @@ class Reports extends Secure_Controller
 	//Summary Suppliers report
 	public function summary_suppliers($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_suppliers');
 		$model = $this->Summary_suppliers;
@@ -217,7 +265,7 @@ class Reports extends Secure_Controller
 	//Summary Items report
 	public function summary_items($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_items');
 		$model = $this->Summary_items;
@@ -256,7 +304,7 @@ class Reports extends Secure_Controller
 	//Summary Employees report
 	public function summary_employees($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_employees');
 		$model = $this->Summary_employees;
@@ -293,7 +341,7 @@ class Reports extends Secure_Controller
 	//Summary Taxes report
 	public function summary_taxes($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_taxes');
 		$model = $this->Summary_taxes;
@@ -328,7 +376,7 @@ class Reports extends Secure_Controller
 	//Summary Sales Taxes report
 	public function summary_sales_taxes($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_sales_taxes');
 		$model = $this->Summary_sales_taxes;
@@ -362,9 +410,7 @@ class Reports extends Secure_Controller
 	public function summary_discounts_input()
 	{
 		$data = array();
-		$stock_locations = $data = $this->xss_clean($this->Stock_location->get_allowed_locations('sales'));
-		$stock_locations['all'] = $this->lang->line('reports_all');
-		$data['stock_locations'] = array_reverse($stock_locations, TRUE);
+		$data['stock_locations'] = $this->_report_location_options();
 		$data['mode'] = 'sale';
 		$data['discount_type_options'] = array(
 			'0' => $this->lang->line('reports_discount_percent'),
@@ -377,7 +423,7 @@ class Reports extends Secure_Controller
 	//Summary Discounts report
 	public function summary_discounts($start_date, $end_date, $sale_type, $location_id = 'all', $discount_type=0)
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id,'discount_type'=>$discount_type);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id,'discount_type'=>$discount_type);
 
 		$this->load->model('reports/Summary_discounts');
 		$model = $this->Summary_discounts;
@@ -409,7 +455,7 @@ class Reports extends Secure_Controller
 	//Summary Payments report
 	public function summary_payments($start_date, $end_date, $sale_type = '0', $location_id = 'all', $discount_type = '0')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => 'complete', 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => 'complete', 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_payments');
 		$model = $this->Summary_payments;
@@ -466,9 +512,7 @@ class Reports extends Secure_Controller
 	public function date_input()
 	{
 		$data = array();
-		$stock_locations = $data = $this->xss_clean($this->Stock_location->get_allowed_locations('sales'));
-		$stock_locations['all'] = $this->lang->line('reports_all');
-		$data['stock_locations'] = array_reverse($stock_locations, TRUE);
+		$data['stock_locations'] = $this->_report_location_options();
 		$data['mode'] = 'sale';
 		$data['sale_type_options'] = $this->get_sale_type_options();
 
@@ -486,9 +530,7 @@ class Reports extends Secure_Controller
 	//Input for the Summary Payments report: date range plus stock-location filter.
 	public function date_input_payments()
 	{
-		$stock_locations = $this->xss_clean($this->Stock_location->get_allowed_locations('sales'));
-		$stock_locations['all'] = $this->lang->line('reports_all');
-		$data = array('stock_locations' => array_reverse($stock_locations, TRUE));
+		$data = array('stock_locations' => $this->_report_location_options());
 
 		$this->load->view('reports/date_input', $data);
 	}
@@ -497,9 +539,7 @@ class Reports extends Secure_Controller
 	public function date_input_sales()
 	{
 		$data = array();
-		$stock_locations = $data = $this->xss_clean($this->Stock_location->get_allowed_locations('sales'));
-		$stock_locations['all'] =  $this->lang->line('reports_all');
-		$data['stock_locations'] = array_reverse($stock_locations, TRUE);
+		$data['stock_locations'] = $this->_report_location_options();
 		$data['mode'] = 'sale';
 		$data['sale_type_options'] = $this->get_sale_type_options();
 
@@ -509,9 +549,7 @@ class Reports extends Secure_Controller
 	public function date_input_recv()
 	{
 		$data = array();
-		$stock_locations = $data = $this->xss_clean($this->Stock_location->get_allowed_locations('receivings'));
-		$stock_locations['all'] =  $this->lang->line('reports_all');
-		$data['stock_locations'] = array_reverse($stock_locations, TRUE);
+		$data['stock_locations'] = $this->_report_location_options();
 		$data['mode'] = 'receiving';
 
 		$this->load->view('reports/date_input', $data);
@@ -520,6 +558,7 @@ class Reports extends Secure_Controller
 	//Graphical Expenses by Categories report
 	public function graphical_summary_expenses_categories($start_date, $end_date, $sale_type)
 	{
+		// expenses have no stock location, so this report is deliberately left unfiltered
 		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type);
 
 		$this->load->model('reports/Summary_expenses_categories');
@@ -554,7 +593,7 @@ class Reports extends Secure_Controller
 	//Graphical summary sales report
 	public function graphical_summary_sales($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_sales');
 		$model = $this->Summary_sales;
@@ -591,7 +630,7 @@ class Reports extends Secure_Controller
 	//Graphical summary items report
 	public function graphical_summary_items($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_items');
 		$model = $this->Summary_items;
@@ -627,7 +666,7 @@ class Reports extends Secure_Controller
 	//Graphical summary customers report
 	public function graphical_summary_categories($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_categories');
 		$model = $this->Summary_categories;
@@ -661,7 +700,7 @@ class Reports extends Secure_Controller
 	//Graphical summary suppliers report
 	public function graphical_summary_suppliers($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_suppliers');
 		$model = $this->Summary_suppliers;
@@ -695,7 +734,7 @@ class Reports extends Secure_Controller
 	//Graphical summary employees report
 	public function graphical_summary_employees($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_employees');
 		$model = $this->Summary_employees;
@@ -729,7 +768,7 @@ class Reports extends Secure_Controller
 	//Graphical summary taxes report
 	public function graphical_summary_taxes($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_taxes');
 		$model = $this->Summary_taxes;
@@ -763,7 +802,7 @@ class Reports extends Secure_Controller
 	//Graphical summary sales taxes report
 	public function graphical_summary_sales_taxes($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_sales_taxes');
 		$model = $this->Summary_sales_taxes;
@@ -797,7 +836,7 @@ class Reports extends Secure_Controller
 	//Graphical summary customers report
 	public function graphical_summary_customers($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_customers');
 		$model = $this->Summary_customers;
@@ -833,7 +872,7 @@ class Reports extends Secure_Controller
 	//Graphical summary discounts report
 	public function graphical_summary_discounts($start_date, $end_date, $sale_type, $location_id = 'all', $discount_type=0)
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id,'discount_type'=>$discount_type);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id,'discount_type'=>$discount_type);
 
 		$this->load->model('reports/Summary_discounts');
 		$model = $this->Summary_discounts;
@@ -869,7 +908,7 @@ class Reports extends Secure_Controller
 	//Graphical summary payments report
 	public function graphical_summary_payments($start_date, $end_date, $sale_type, $location_id = 'all')
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id);
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id);
 
 		$this->load->model('reports/Summary_payments');
 		$model = $this->Summary_payments;
@@ -944,7 +983,7 @@ class Reports extends Secure_Controller
 
 	public function specific_customer($start_date, $end_date, $customer_id, $sale_type, $payment_type)
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'customer_id' => $customer_id, 'sale_type' => $sale_type, 'payment_type' => $payment_type);
+		$inputs = array('location_ids' => $this->_report_location_ids('all'), 'start_date' => $start_date, 'end_date' => $end_date, 'customer_id' => $customer_id, 'sale_type' => $sale_type, 'payment_type' => $payment_type);
 
 		$this->load->model('reports/Specific_customer');
 		$model = $this->Specific_customer;
@@ -1056,7 +1095,7 @@ class Reports extends Secure_Controller
 
 	public function specific_employee($start_date, $end_date, $employee_id, $sale_type)
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'employee_id' => $employee_id, 'sale_type' => $sale_type);
+		$inputs = array('location_ids' => $this->_report_location_ids('all'), 'start_date' => $start_date, 'end_date' => $end_date, 'employee_id' => $employee_id, 'sale_type' => $sale_type);
 
 		$this->load->model('reports/Specific_employee');
 		$model = $this->Specific_employee;
@@ -1164,7 +1203,7 @@ class Reports extends Secure_Controller
 
 	public function specific_discount($start_date, $end_date, $discount, $sale_type, $discount_type)
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'discount' => $discount, 'sale_type' => $sale_type, 'discount_type' => $discount_type);
+		$inputs = array('location_ids' => $this->_report_location_ids('all'), 'start_date' => $start_date, 'end_date' => $end_date, 'discount' => $discount, 'sale_type' => $sale_type, 'discount_type' => $discount_type);
 
 		$this->load->model('reports/Specific_discount');
 		$model = $this->Specific_discount;
@@ -1257,7 +1296,15 @@ class Reports extends Secure_Controller
 
 		$model->create($inputs);
 
-		$report_data = $model->getDataBySaleId($sale_id);
+		$location_ids = $this->_report_location_ids('all');
+		if(!$model->has_allowed_location($sale_id, $location_ids))
+		{
+			echo json_encode(array());
+
+			return;
+		}
+
+		$report_data = $model->getDataBySaleId($sale_id, array('location_ids' => $location_ids));
 
 		if($report_data['sale_status'] == CANCELED)
 		{
@@ -1308,7 +1355,7 @@ class Reports extends Secure_Controller
 
 	public function specific_supplier($start_date, $end_date, $supplier_id, $sale_type)
 	{
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'supplier_id' => $supplier_id, 'sale_type' => $sale_type);
+		$inputs = array('location_ids' => $this->_report_location_ids('all'), 'start_date' => $start_date, 'end_date' => $end_date, 'supplier_id' => $supplier_id, 'sale_type' => $sale_type);
 
 		$this->load->model('reports/Specific_supplier');
 		$model = $this->Specific_supplier;
@@ -1372,7 +1419,7 @@ class Reports extends Secure_Controller
 	{
 		$definition_names = $this->Attribute->get_definitions_by_flags(Attribute::SHOW_IN_SALES);
 
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_id' => $location_id, 'definition_ids' => array_keys($definition_names));
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'sale_type' => $sale_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id, 'definition_ids' => array_keys($definition_names));
 
 		$this->load->model('reports/Detailed_sales');
 		$model = $this->Detailed_sales;
@@ -1505,11 +1552,19 @@ class Reports extends Secure_Controller
 
 		$model->create($inputs);
 
-		$report_data = $model->getDataByReceivingId($receiving_id);
+		$location_ids = $this->_report_location_ids('all');
+		if(!$model->has_allowed_location($receiving_id, $location_ids))
+		{
+			echo json_encode(array());
+
+			return;
+		}
+
+		$report_data = $model->getDataByReceivingId($receiving_id, array('location_ids' => $location_ids));
 
 		$summary_data = $this->xss_clean(array(
 			'receiving_id' => $report_data['receiving_id'],
-			'receiving_time' => to_datetime(strtotime($row['receiving_time'])),
+			'receiving_time' => to_datetime(strtotime($report_data['receiving_time'])),
 			'quantity' => to_quantity_decimals($report_data['items_purchased']),
 			'employee_name' => $report_data['employee_name'],
 			'supplier_name' => $report_data['supplier_name'],
@@ -1529,7 +1584,7 @@ class Reports extends Secure_Controller
 	{
 		$definition_names = $this->Attribute->get_definitions_by_flags(Attribute::SHOW_IN_RECEIVINGS);
 
-		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'receiving_type' => $receiving_type, 'location_id' => $location_id, 'definition_ids' => array_keys($definition_names));
+		$inputs = array('start_date' => $start_date, 'end_date' => $end_date, 'receiving_type' => $receiving_type, 'location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id, 'definition_ids' => array_keys($definition_names));
 
 		$this->load->model('reports/Detailed_receivings');
 		$model = $this->Detailed_receivings;
@@ -1600,7 +1655,7 @@ class Reports extends Secure_Controller
 
 	public function inventory_low()
 	{
-		$inputs = array();
+		$inputs = array('location_ids' => $this->_report_location_ids('all'));
 
 		$this->load->model('reports/Inventory_low');
 		$model = $this->Inventory_low;
@@ -1638,16 +1693,14 @@ class Reports extends Secure_Controller
 		$data = array();
 		$data['item_count'] = $model->getItemCountDropdownArray();
 
-		$stock_locations = $this->xss_clean($this->Stock_location->get_allowed_locations());
-		$stock_locations['all'] = $this->lang->line('reports_all');
-		$data['stock_locations'] = array_reverse($stock_locations, TRUE);
+		$data['stock_locations'] = $this->_report_location_options();
 
 		$this->load->view('reports/inventory_summary_input', $data);
 	}
 
 	public function inventory_summary($location_id = 'all', $item_count = 'all')
 	{
-		$inputs = array('location_id' => $location_id, 'item_count' => $item_count);
+		$inputs = array('location_ids' => $this->_report_location_ids($location_id), 'location_id' => $location_id, 'item_count' => $item_count);
 
 		$this->load->model('reports/Inventory_summary');
 		$model = $this->Inventory_summary;

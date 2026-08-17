@@ -47,7 +47,30 @@ class Detailed_sales extends Report
 		);
 	}
 
-	public function getDataBySaleId($sale_id)
+	/*
+	 Whether the sale has at least one line in a location the account may see report data for.
+	 $location_ids follows the Reports controller convention: NULL means unrestricted.
+	 */
+	public function has_allowed_location($sale_id, $location_ids)
+	{
+		if($location_ids === NULL)
+		{
+			return TRUE;
+		}
+
+		if(empty($location_ids))
+		{
+			return FALSE;
+		}
+
+		$this->db->from('sales_items_temp');
+		$this->db->where('sale_id', $sale_id);
+		$this->db->where_in('item_location', $location_ids);
+
+		return $this->db->get()->num_rows() > 0;
+	}
+
+	public function getDataBySaleId($sale_id, array $inputs = array())
 	{
 		$this->db->select('sale_id,
 			sale_time as sale_time,
@@ -64,6 +87,8 @@ class Detailed_sales extends Report
 			comment');
 		$this->db->from('sales_items_temp');
 		$this->db->where('sale_id', $sale_id);
+		// totals have to cover the same lines the detailed report row shows
+		$this->apply_location_filter($inputs, 'item_location');
 
 		return $this->db->get()->row_array();
 	}
@@ -94,10 +119,7 @@ class Detailed_sales extends Report
 			MAX(comment) AS comment');
 		$this->db->from('sales_items_temp');
 
-		if($inputs['location_id'] != 'all')
-		{
-			$this->db->where('item_location', $inputs['location_id']);
-		}
+		$this->apply_location_filter($inputs, 'item_location');
 
 		if($inputs['sale_type'] == 'complete')
 		{
@@ -175,6 +197,8 @@ class Detailed_sales extends Report
 			}
 			$this->db->group_by('sales_items_temp.sale_id, sales_items_temp.item_id, sales_items_temp.line');
 			$this->db->where('sales_items_temp.sale_id', $value['sale_id']);
+			// a sale can span locations, so the line items need the same restriction as the summary row
+			$this->apply_location_filter($inputs, 'sales_items_temp.item_location');
 			$data['details'][$key] = $this->db->get()->result_array();
 
 			$this->db->select('used, earned');
@@ -191,10 +215,7 @@ class Detailed_sales extends Report
 		$this->db->select('SUM(subtotal) AS subtotal, SUM(tax) AS tax, SUM(total) AS total, SUM(cost) AS cost, SUM(profit) AS profit');
 		$this->db->from('sales_items_temp');
 
-		if($inputs['location_id'] != 'all')
-		{
-			$this->db->where('item_location', $inputs['location_id']);
-		}
+		$this->apply_location_filter($inputs, 'item_location');
 
 		if($inputs['sale_type'] == 'complete')
 		{

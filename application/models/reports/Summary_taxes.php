@@ -27,6 +27,9 @@ class Summary_taxes extends Summary_report
 		{
 			$this->db->where('sales.sale_time BETWEEN ' . $this->db->escape(rawurldecode($inputs['start_date'])) . ' AND ' . $this->db->escape(rawurldecode($inputs['end_date'])));
 		}
+
+		// this report overrides the parent _where(), so it has to apply the location restriction itself
+		$this->apply_location_filter($inputs);
 	}
 
 	public function getData(array $inputs)
@@ -41,6 +44,10 @@ class Summary_taxes extends Summary_report
 		{
 			$where .= 'AND sale_time BETWEEN ' . $this->db->escape(rawurldecode($inputs['start_date'])) . ' AND ' . $this->db->escape(rawurldecode($inputs['end_date']));
 		}
+
+		// the subquery below joins sales_items, so the tax lines can be restricted directly
+		$where .= $this->location_filter_sql($inputs, 'sales_items.item_location');
+
 		$decimals = totals_decimals();
 
 		if($this->config->item('tax_included'))

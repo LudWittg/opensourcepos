@@ -33,7 +33,30 @@ class Detailed_receivings extends Report
 		);
 	}
 
-	public function getDataByReceivingId($receiving_id)
+	/*
+	 Whether the receiving has at least one line in a location the account may see report data for.
+	 $location_ids follows the Reports controller convention: NULL means unrestricted.
+	 */
+	public function has_allowed_location($receiving_id, $location_ids)
+	{
+		if($location_ids === NULL)
+		{
+			return TRUE;
+		}
+
+		if(empty($location_ids))
+		{
+			return FALSE;
+		}
+
+		$this->db->from('receivings_items_temp');
+		$this->db->where('receiving_id', $receiving_id);
+		$this->db->where_in('item_location', $location_ids);
+
+		return $this->db->get()->num_rows() > 0;
+	}
+
+	public function getDataByReceivingId($receiving_id, array $inputs = array())
 	{
 		$this->db->select('receiving_id,
 			MAX(receiving_time) as receiving_time,
@@ -50,6 +73,8 @@ class Detailed_receivings extends Report
 		$this->db->join('people AS employee', 'receivings_items_temp.employee_id = employee.person_id');
 		$this->db->join('suppliers AS supplier', 'receivings_items_temp.supplier_id = supplier.person_id', 'left');
 		$this->db->where('receiving_id', $receiving_id);
+		// totals have to cover the same lines the detailed report row shows
+		$this->apply_location_filter($inputs, 'item_location');
 		$this->db->group_by('receiving_id');
 
 		return $this->db->get()->row_array();
@@ -71,10 +96,7 @@ class Detailed_receivings extends Report
 		$this->db->join('people AS employee', 'receivings_items_temp.employee_id = employee.person_id');
 		$this->db->join('suppliers AS supplier', 'receivings_items_temp.supplier_id = supplier.person_id', 'left');
 
-		if($inputs['location_id'] != 'all')
-		{
-			$this->db->where('item_location', $inputs['location_id']);
-		}
+		$this->apply_location_filter($inputs, 'item_location');
 
 		if($inputs['receiving_type'] == 'receiving')
 		{
@@ -120,6 +142,8 @@ class Detailed_receivings extends Report
 				$this->db->join('attribute_values', 'attribute_values.attribute_id = attribute_links.attribute_id', 'left');
 			}
 			$this->db->where('receivings_items_temp.receiving_id', $value['receiving_id']);
+			// a receiving can span locations, so the line items need the same restriction as the summary row
+			$this->apply_location_filter($inputs, 'receivings_items_temp.item_location');
 			$this->db->group_by('receivings_items_temp.receiving_id, receivings_items_temp.item_id');
 			$data['details'][$key] = $this->db->get()->result_array();
 		}
@@ -132,10 +156,7 @@ class Detailed_receivings extends Report
 		$this->db->select('SUM(total) AS total');
 		$this->db->from('receivings_items_temp');
 
-		if($inputs['location_id'] != 'all')
-		{
-			$this->db->where('item_location', $inputs['location_id']);
-		}
+		$this->apply_location_filter($inputs, 'item_location');
 
 		if($inputs['receiving_type'] == 'receiving')
 		{

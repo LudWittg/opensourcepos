@@ -28,6 +28,7 @@ class Inventory_low extends Report
 			AND items.stock_type = 0
 			AND item_quantities.quantity <= items.reorder_level
 			AND stock_locations.deleted = 0
+			" . $this->location_filter_sql($inputs, 'stock_locations.location_id') . "
 			ORDER BY items.name");
 
 		return $query->result_array();

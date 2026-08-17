@@ -68,6 +68,7 @@ class Specific_customer extends Report
 			MAX(payment_type) AS payment_type,
 			MAX(comment) AS comment');
 		$this->db->from('sales_items_temp');
+		$this->apply_location_filter($inputs, 'item_location');
 
 		$this->db->where('customer_id', $inputs['customer_id']);
 
@@ -129,6 +130,7 @@ class Specific_customer extends Report
 		{
 			$this->db->select('name, category, item_number, description, quantity_purchased, subtotal, tax, total, cost, profit, discount, discount_type');
 			$this->db->from('sales_items_temp');
+			$this->apply_location_filter($inputs, 'item_location');
 			$this->db->where('sale_id', $value['sale_id']);
 			$data['details'][$key] = $this->db->get()->result_array();
 			$this->db->select('used, earned');
@@ -144,6 +146,7 @@ class Specific_customer extends Report
 	{
 		$this->db->select('SUM(subtotal) AS subtotal, SUM(tax) AS tax, SUM(total) AS total, SUM(cost) AS cost, SUM(profit) AS profit');
 		$this->db->from('sales_items_temp');
+		$this->apply_location_filter($inputs, 'item_location');
 
 		$this->db->where('customer_id', $inputs['customer_id']);
 

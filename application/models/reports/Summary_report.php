@@ -111,10 +111,7 @@ abstract class Summary_report extends Report
 			$this->db->where('sales.sale_time BETWEEN ' . $this->db->escape(rawurldecode($inputs['start_date'])) . ' AND ' . $this->db->escape(rawurldecode($inputs['end_date'])));
 		}
 
-		if($inputs['location_id'] != 'all')
-		{
-			$this->db->where('sales_items.item_location', $inputs['location_id']);
-		}
+		$this->apply_location_filter($inputs);
 
 		if($inputs['sale_type'] == 'complete')
 		{

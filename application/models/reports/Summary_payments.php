@@ -56,7 +56,7 @@ class Summary_payments extends Summary_report
 			$where .= 'sale_time BETWEEN ' . $this->db->escape(rawurldecode($inputs['start_date'])) . ' AND ' . $this->db->escape(rawurldecode($inputs['end_date']));
 		}
 
-		$this->create_summary_payments_temp_tables($where, $inputs['location_id']);
+		$this->create_summary_payments_temp_tables($where, $inputs);
 
 		$select = '\'' . $this->lang->line('reports_trans_sales') . '\' AS trans_group, ';
 		$select .= '(CASE sale_type WHEN ' . SALE_TYPE_POS . ' THEN \'' . $this->lang->line('reports_code_pos')
@@ -69,7 +69,7 @@ class Summary_payments extends Summary_report
 		$select .= 'IFNULL(SUM(sumpay_payments.total_cash_refund),0) AS trans_refunded, ';
 		$select .= 'SUM(CASE WHEN sumpay_items.trans_amount - IFNULL(sumpay_payments.total_payments,0) > 0 THEN sumpay_items.trans_amount - IFNULL(sumpay_payments.total_payments,0) ELSE 0 END) as trans_due ';
 
-		$location_filter_active = ($inputs['location_id'] !== 'all');
+		$location_filter_active = $this->is_location_filter_active($inputs);
 
 		$this->db->select($select);
 		$this->db->from('ospos_sales AS sales');
@@ -144,7 +144,24 @@ class Summary_payments extends Summary_report
 		return array_merge($sales, $separator, $payments);
 	}
 
-	protected function create_summary_payments_temp_tables($where, $location_id = 'all')
+	/*
+	 The report is restricted whenever the account may not see every stock location, or has picked one:
+	 $inputs['location_ids'] is NULL only when there is nothing to restrict.
+	 */
+	private function is_location_filter_active(array $inputs)
+	{
+		return array_key_exists('location_ids', $inputs) && $inputs['location_ids'] !== NULL;
+	}
+
+	// The allowed locations as a SQL id list; (0) when none are allowed, which matches no line
+	private function location_id_list(array $inputs)
+	{
+		$location_ids = empty($inputs['location_ids']) ? array(0) : $inputs['location_ids'];
+
+		return implode(',', array_map('intval', $location_ids));
+	}
+
+	protected function create_summary_payments_temp_tables($where, array $inputs)
 	{
 		$decimals = totals_decimals();
 
@@ -152,11 +169,11 @@ class Summary_payments extends Summary_report
 			. " THEN sales_items.quantity_purchased * sales_items.item_unit_price - ROUND(sales_items.quantity_purchased * sales_items.item_unit_price * sales_items.discount / 100, $decimals) "
 			. ' ELSE sales_items.quantity_purchased * (sales_items.item_unit_price - sales_items.discount) END';
 
-		$location_filter_active = ($location_id !== 'all');
-		$loc = (int)$location_id;
+		$location_filter_active = $this->is_location_filter_active($inputs);
+		$loc = $this->location_id_list($inputs);
 
-		// When a specific location is chosen, build a per-sale share fraction:
-		//   share = (sum of line amounts at this location) / (sum of all line amounts)
+		// When the visible locations are a subset of all of them, build a per-sale share fraction:
+		//   share = (sum of line amounts at those locations) / (sum of all line amounts)
 		// All other temp tables INNER JOIN this share table so sales with no item
 		// at the location are dropped, and remaining $ values are scaled proportionally.
 		if($location_filter_active)
@@ -165,7 +182,7 @@ class Summary_payments extends Summary_report
 				' (PRIMARY KEY(sale_id)) ENGINE=MEMORY
 				(
 					SELECT sales.sale_id,
-						SUM(CASE WHEN sales_items.item_location = ' . $loc . ' THEN ' . $line_amount . ' ELSE 0 END) /
+						SUM(CASE WHEN sales_items.item_location IN (' . $loc . ') THEN ' . $line_amount . ' ELSE 0 END) /
 						NULLIF(SUM(' . $line_amount . '), 0) AS share
 					FROM ' . $this->db->dbprefix('sales') . ' AS sales
 					INNER JOIN ' . $this->db->dbprefix('sales_items') . ' AS sales_items
@@ -200,7 +217,7 @@ class Summary_payments extends Summary_report
 		// Items temp: when filter active, sum only line amounts at the chosen location
 		// (numerically equivalent to multiplying by share, no extra join needed here).
 		$items_amount = $location_filter_active
-			? 'SUM(CASE WHEN sales_items.item_location = ' . $loc . ' THEN ' . $line_amount . ' ELSE 0 END) AS trans_amount'
+			? 'SUM(CASE WHEN sales_items.item_location IN (' . $loc . ') THEN ' . $line_amount . ' ELSE 0 END) AS trans_amount'
 			: 'SUM(' . $line_amount . ') AS trans_amount';
 
 		$this->db->query('CREATE TEMPORARY TABLE IF NOT EXISTS ' . $this->db->dbprefix('sumpay_items_temp') .

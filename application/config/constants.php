@@ -151,6 +151,13 @@ define('PRICE_MODE_KIT', 1);
 
 define('PAYMENT_TYPE_UNASSIGNED', '--');
 
+/*
+| Prefix of the permissions that scope the reports module to a stock location, e.g.
+| reports_location_Bottega. It is deliberately not 'reports_', which would collide with the
+| per-report permissions (reports_sales, reports_items, ...) for a location named "Sales".
+*/
+define('REPORTS_LOCATION_PREFIX', 'reports_location');
+
 define('CASH_ADJUSTMENT_TRUE', 1);
 define('CASH_ADJUSTMENT_FALSE', 0);
 define('CASH_MODE_TRUE', 1);
